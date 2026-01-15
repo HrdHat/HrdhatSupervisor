@@ -1,0 +1,76 @@
+@import 'tailwindcss';
+@config '../tailwind.config.js';
+
+/* HrdHat Brand Color Variables */
+:root {
+  /* Primary Brand Colors */
+  --hrdhat-golden-brown: #9e5e1a;
+  --hrdhat-lemon-chiffon: #faf7c0;
+  --hrdhat-asparagus-green: #7fb069;
+  --hrdhat-old-gold: #d1bd23;
+  --hrdhat-old-gold-light: #e4c94f;
+  --hrdhat-chili-red: #d94730;
+  --hrdhat-chili-red-light: #e58c7f;
+  
+  /* Dark Theme Base Colors */
+  --dark-bg-primary: #0f172a;
+  --dark-bg-secondary: #1e293b;
+  --dark-bg-tertiary: #334155;
+  --dark-border: #475569;
+  --dark-text-primary: #f8fafc;
+  --dark-text-secondary: #94a3b8;
+  --dark-text-muted: #64748b;
+}
+
+/* Custom base styles */
+@layer base {
+  body {
+    font-family:
+      'Inter',
+      system-ui,
+      -apple-system,
+      BlinkMacSystemFont,
+      'Segoe UI',
+      Roboto,
+      sans-serif;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-weight: 600;
+  }
+}
+
+/* Custom utilities */
+@layer utilities {
+  .card-glass {
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+  }
+  
+  /* Dark theme glass card */
+  .card-dark-glass {
+    background: rgba(30, 41, 59, 0.8);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(71, 85, 105, 0.5);
+  }
+  
+  /* HrdHat gradient background */
+  .bg-hrdhat-gradient {
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+  }
+  
+  /* HrdHat accent button gradient */
+  .btn-hrdhat-accent {
+    background: linear-gradient(135deg, #d1bd23 0%, #9e5e1a 100%);
+  }
+  
+  .btn-hrdhat-accent:hover {
+    background: linear-gradient(135deg, #b19e1d 0%, #7a4a15 100%);
+  }
+}
