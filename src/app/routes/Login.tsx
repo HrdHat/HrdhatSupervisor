@@ -124,12 +124,18 @@ export default function Login() {
 
           {/* Back to HrdHat link */}
           <div className="mt-4 text-center">
-            <a
-              href="/"
+            <button
+              type="button"
+              onClick={() => {
+                const frontendUrl = import.meta.env.DEV
+                  ? 'http://localhost:5173'
+                  : 'https://hrdhat.site';
+                window.location.href = frontendUrl;
+              }}
               className="text-sm text-[#d1bd23] hover:text-[#e4c94f] transition-colors"
             >
               &larr; Back to HrdHat
-            </a>
+            </button>
           </div>
         </div>
       </div>
