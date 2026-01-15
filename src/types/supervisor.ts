@@ -26,7 +26,7 @@ export interface ProjectWorker {
   user_email?: string;
   user_full_name?: string;
   // Joined fields (from project_subcontractors)
-  subcontractor_name?: string;
+  subcontractor_name?: string | null;
 }
 
 export interface ProjectFolder {

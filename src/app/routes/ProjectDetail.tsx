@@ -596,7 +596,9 @@ export default function ProjectDetail() {
                 </div>
                 <button
                   onClick={() => {
-                    navigator.clipboard.writeText(project.processing_email);
+                    if (project.processing_email) {
+                      navigator.clipboard.writeText(project.processing_email);
+                    }
                     // Optional: Show a toast notification
                   }}
                   className="ml-4 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors flex items-center gap-2"
