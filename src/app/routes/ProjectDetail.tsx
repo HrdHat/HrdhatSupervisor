@@ -1,12 +1,22 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 
 import { useAuthStore } from '@/stores/authStore';
 import { useSupervisorStore } from '@/stores/supervisorStore';
 import { useDocumentRealtime } from '@/hooks/useDocumentRealtime';
 import { DocumentFilterBar, filterDocuments } from '@/components/DocumentFilterBar';
 import { QuickReviewModal } from '@/components/QuickReviewModal';
-import type { ReceivedDocument, DocumentFilters, DocumentMetadata, ProjectSubcontractor, CreateSubcontractorInput } from '@/types/supervisor';
+import { ShiftList } from '@/components/ShiftList';
+import { ShiftDetail } from '@/components/ShiftDetail';
+import { ShiftCloseout } from '@/components/ShiftCloseout';
+import { CreateShiftModal } from '@/components/CreateShiftModal';
+import { DiscoverFromFormsModal } from '@/components/DiscoverFromFormsModal';
+import { DailyLogPanel } from '@/components/DailyLogPanel';
+import { SiteIssuesTracker } from '@/components/SiteIssuesTracker';
+import { ProjectDailyReportModal } from '@/components/ProjectDailyReportModal';
+import { QuickAddBar } from '@/components/QuickAddBar';
+import { LoggingSection } from '@/components/LoggingSection';
+import type { ReceivedDocument, DocumentFilters, DocumentMetadata, ProjectSubcontractor, CreateSubcontractorInput, ProjectShiftWithStats, ProjectDailyReport, DailyLogType } from '@/types/supervisor';
 import { getEffectiveMetadata } from '@/types/supervisor';
 
 // Toast notification for new documents
@@ -19,8 +29,22 @@ interface Toast {
 
 export default function ProjectDetail() {
   const { projectId } = useParams<{ projectId: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const [activeTab, setActiveTab] = useState<'folders' | 'workers' | 'subcontractors' | 'documents'>('folders');
+  // Management panel state (for settings dropdown)
+  const [managementPanel, setManagementPanel] = useState<'folders' | 'contacts' | 'subcontractors' | null>(null);
+  const [showSettingsMenu, setShowSettingsMenu] = useState(false);
+  
+  // Legacy tab state (for backwards compatibility during refactor)
+  const [activeTab, setActiveTab] = useState<'folders' | 'contacts' | 'subcontractors' | 'documents' | 'shifts'>('shifts');
+  
+  // Daily log add state
+  const [activeLogType, setActiveLogType] = useState<'visitor' | 'delivery' | 'manpower' | 'site_issue' | 'schedule_delay' | null>(null);
+  
+  // Shift management state
+  const [showCreateShiftModal, setShowCreateShiftModal] = useState(false);
+  const [selectedShift, setSelectedShift] = useState<ProjectShiftWithStats | null>(null);
+  const [showShiftCloseout, setShowShiftCloseout] = useState(false);
   const [showFolderModal, setShowFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [newFolderDescription, setNewFolderDescription] = useState('');
@@ -81,25 +105,34 @@ export default function ProjectDetail() {
   // Toast notifications for realtime updates
   const [toasts, setToasts] = useState<Toast[]>([]);
 
+  // AI Discovery modal state
+  const [showDiscoverWorkersModal, setShowDiscoverWorkersModal] = useState(false);
+  const [showDiscoverSubcontractorsModal, setShowDiscoverSubcontractorsModal] = useState(false);
+
+  // Daily Log & PDR state
+  const [showSiteIssues, setShowSiteIssues] = useState(false);
+  const [showPDRModal, setShowPDRModal] = useState(false);
+  const [pdrDate, setPdrDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [selectedPDR, setSelectedPDR] = useState<ProjectDailyReport | null>(null);
+
   const logout = useAuthStore((s) => s.logout);
   const user = useAuthStore((s) => s.user);
+  const setLastActiveProject = useAuthStore((s) => s.setLastActiveProject);
 
   const projects = useSupervisorStore((s) => s.projects);
   const folders = useSupervisorStore((s) => s.folders);
-  const workers = useSupervisorStore((s) => s.workers);
+  const contacts = useSupervisorStore((s) => s.contacts);
   const subcontractors = useSupervisorStore((s) => s.subcontractors);
   const documents = useSupervisorStore((s) => s.documents);
   const loading = useSupervisorStore((s) => s.loading);
   const error = useSupervisorStore((s) => s.error);
   const fetchProjects = useSupervisorStore((s) => s.fetchProjects);
   const fetchFolders = useSupervisorStore((s) => s.fetchFolders);
-  const fetchWorkers = useSupervisorStore((s) => s.fetchWorkers);
+  const fetchContacts = useSupervisorStore((s) => s.fetchContacts);
   const fetchSubcontractors = useSupervisorStore((s) => s.fetchSubcontractors);
   const fetchDocuments = useSupervisorStore((s) => s.fetchDocuments);
   const createFolder = useSupervisorStore((s) => s.createFolder);
-  const addWorker = useSupervisorStore((s) => s.addWorker);
-  const removeWorker = useSupervisorStore((s) => s.removeWorker);
-  const updateWorkerSubcontractor = useSupervisorStore((s) => s.updateWorkerSubcontractor);
+  const removeContact = useSupervisorStore((s) => s.removeContact);
   const createSubcontractor = useSupervisorStore((s) => s.createSubcontractor);
   const updateSubcontractor = useSupervisorStore((s) => s.updateSubcontractor);
   const deleteSubcontractor = useSupervisorStore((s) => s.deleteSubcontractor);
@@ -117,6 +150,21 @@ export default function ProjectDetail() {
   const moveDocumentsToFolder = useSupervisorStore((s) => s.moveDocumentsToFolder);
   const deleteDocuments = useSupervisorStore((s) => s.deleteDocuments);
   const clearError = useSupervisorStore((s) => s.clearError);
+  
+  // Shift store selectors
+  const shifts = useSupervisorStore((s) => s.shifts);
+  const shiftWorkers = useSupervisorStore((s) => s.shiftWorkers);
+  const fetchShifts = useSupervisorStore((s) => s.fetchShifts);
+  const setCurrentShift = useSupervisorStore((s) => s.setCurrentShift);
+  const fetchShiftWorkers = useSupervisorStore((s) => s.fetchShiftWorkers);
+  const deleteShift = useSupervisorStore((s) => s.deleteShift);
+
+  // Daily Log & PDR store selectors
+  const dailyLogs = useSupervisorStore((s) => s.dailyLogs);
+  const dailyReports = useSupervisorStore((s) => s.dailyReports);
+  const fetchDailyLogs = useSupervisorStore((s) => s.fetchDailyLogs);
+  const fetchDailyReports = useSupervisorStore((s) => s.fetchDailyReports);
+  const getOpenSiteIssues = useSupervisorStore((s) => s.getOpenSiteIssues);
 
   const project = projects.find((p) => p.id === projectId);
 
@@ -162,12 +210,36 @@ export default function ProjectDetail() {
 
   useEffect(() => {
     if (projectId) {
+      // Track this as the last active project for redirect on next login
+      setLastActiveProject(projectId);
+      
       fetchFolders(projectId);
-      fetchWorkers(projectId);
+      fetchContacts(); // Fetch supervisor's global contacts
       fetchSubcontractors(projectId);
       fetchDocuments(projectId);
+      fetchShifts(projectId);
+      fetchDailyLogs(projectId);
+      fetchDailyReports(projectId);
     }
-  }, [projectId, fetchFolders, fetchWorkers, fetchSubcontractors, fetchDocuments]);
+  }, [projectId, setLastActiveProject, fetchFolders, fetchContacts, fetchSubcontractors, fetchDocuments, fetchShifts, fetchDailyLogs, fetchDailyReports]);
+
+  // Handle URL query parameters for deep linking (e.g., from Dashboard "Start New Shift")
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    const newShift = searchParams.get('newShift');
+    
+    if (tab === 'shifts') {
+      setActiveTab('shifts');
+      if (newShift === 'true') {
+        // Small delay to ensure data is loaded
+        setTimeout(() => {
+          setShowCreateShiftModal(true);
+        }, 100);
+      }
+      // Clear the URL params after processing
+      setSearchParams({});
+    }
+  }, [searchParams, setSearchParams]);
 
   const handleCreateFolder = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -480,7 +552,10 @@ export default function ProjectDetail() {
     );
   }
 
-  const activeWorkers = workers.filter((w) => w.status === 'active');
+  // Filter contacts by current project (or show all if no project filter needed)
+  const projectContacts = projectId 
+    ? contacts.filter((c) => c.recent_project_id === projectId || c.recent_project_id === null)
+    : contacts;
   const activeSubcontractors = subcontractors.filter((s) => s.status === 'active');
 
   return (
@@ -576,39 +651,29 @@ export default function ProjectDetail() {
             </span>
           </div>
 
-          {/* Project Email for Form Submission */}
+          {/* Project Email - Compact inline version */}
           {project?.processing_email && (
-            <div className="mt-6 p-4 bg-primary-50 border-2 border-primary-200 rounded-lg">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <svg className="w-5 h-5 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                    </svg>
-                    <h3 className="font-semibold text-secondary-900">Send Forms To:</h3>
-                  </div>
-                  <div className="font-mono text-lg text-primary-700 break-all">
-                    {project.processing_email}
-                  </div>
-                  <p className="text-sm text-secondary-600 mt-2">
-                    Workers can email forms with attachments to this address. AI will automatically classify and file them.
-                  </p>
-                </div>
-                <button
-                  onClick={() => {
-                    if (project.processing_email) {
-                      navigator.clipboard.writeText(project.processing_email);
-                    }
-                    // Optional: Show a toast notification
-                  }}
-                  className="ml-4 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors flex items-center gap-2"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                  </svg>
-                  Copy
-                </button>
-              </div>
+            <div className="mt-4 flex items-center gap-3 text-sm">
+              <svg className="w-4 h-4 text-secondary-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+              <span className="text-secondary-500">Send forms to:</span>
+              <code className="font-mono text-primary-600 bg-primary-50 px-2 py-0.5 rounded">
+                {project.processing_email}
+              </code>
+              <button
+                onClick={() => {
+                  if (project.processing_email) {
+                    navigator.clipboard.writeText(project.processing_email);
+                  }
+                }}
+                className="p-1.5 text-secondary-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
+                title="Copy email address"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+              </button>
             </div>
           )}
 
@@ -623,8 +688,8 @@ export default function ProjectDetail() {
               <div className="text-sm text-secondary-500">Subcontractors</div>
             </div>
             <div>
-              <div className="text-2xl font-bold text-secondary-900">{activeWorkers.length}</div>
-              <div className="text-sm text-secondary-500">Workers</div>
+              <div className="text-2xl font-bold text-secondary-900">{contacts.length}</div>
+              <div className="text-sm text-secondary-500">Contacts</div>
             </div>
             <div>
               <div className="text-2xl font-bold text-secondary-900">{totalDocumentsCount}</div>
@@ -636,11 +701,21 @@ export default function ProjectDetail() {
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="bg-white rounded-xl shadow-card">
+        {/* Quick Add Bar - All log types with equal weight */}
+        <QuickAddBar 
+          onAddShift={() => setShowCreateShiftModal(true)}
+          onAddLog={(type) => {
+            setActiveLogType(type);
+            setActiveTab('shifts'); // Switch to shifts tab to show log panel
+          }}
+        />
+
+        {/* Main Content Tabs - Reordered for logging focus */}
+        <div className="bg-white rounded-xl shadow-card mt-6">
           <div className="border-b border-secondary-200">
             <nav className="flex -mb-px">
-              {(['folders', 'subcontractors', 'workers', 'documents'] as const).map((tab) => (
+              {/* Primary tabs: Shifts & Log, Documents */}
+              {(['shifts', 'documents'] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -650,15 +725,88 @@ export default function ProjectDetail() {
                       : 'border-transparent text-secondary-500 hover:text-secondary-700'
                   }`}
                 >
-                  {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                  {tab === 'shifts' ? 'Logging & Shifts' : 'Documents'}
                   {/* Show badge for documents needing review */}
                   {tab === 'documents' && unsortedCount > 0 && (
                     <span className="bg-warning-500 text-white text-xs px-2 py-0.5 rounded-full animate-pulse">
                       {unsortedCount}
                     </span>
                   )}
+                  {/* Show badge for active shifts */}
+                  {tab === 'shifts' && shifts.filter(s => s.status === 'active').length > 0 && (
+                    <span className="bg-blue-500 text-white text-xs px-2 py-0.5 rounded-full">
+                      {shifts.filter(s => s.status === 'active').length}
+                    </span>
+                  )}
                 </button>
               ))}
+              
+              {/* Divider */}
+              <div className="flex-1" />
+              
+              {/* Settings dropdown for management tabs */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowSettingsMenu(!showSettingsMenu)}
+                  className={`px-4 py-4 text-sm font-medium transition-colors flex items-center gap-2 ${
+                    showSettingsMenu || ['folders', 'subcontractors', 'contacts'].includes(activeTab)
+                      ? 'text-primary-600'
+                      : 'text-secondary-500 hover:text-secondary-700'
+                  }`}
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  Manage
+                  <svg className={`w-4 h-4 transition-transform ${showSettingsMenu ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                
+                {/* Dropdown menu */}
+                {showSettingsMenu && (
+                  <>
+                    {/* Click outside to close */}
+                    <div 
+                      className="fixed inset-0 z-10" 
+                      onClick={() => setShowSettingsMenu(false)}
+                    />
+                    <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-secondary-200 py-1 z-20">
+                    <button
+                      onClick={() => { setActiveTab('folders'); setShowSettingsMenu(false); }}
+                      className={`w-full text-left px-4 py-2 text-sm hover:bg-secondary-50 flex items-center gap-2 ${activeTab === 'folders' ? 'text-primary-600 bg-primary-50' : 'text-secondary-700'}`}
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                      </svg>
+                      Folders
+                      <span className="ml-auto text-xs text-secondary-400">{folders.length}</span>
+                    </button>
+                    <button
+                      onClick={() => { setActiveTab('subcontractors'); setShowSettingsMenu(false); }}
+                      className={`w-full text-left px-4 py-2 text-sm hover:bg-secondary-50 flex items-center gap-2 ${activeTab === 'subcontractors' ? 'text-primary-600 bg-primary-50' : 'text-secondary-700'}`}
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                      </svg>
+                      Subcontractors
+                      <span className="ml-auto text-xs text-secondary-400">{activeSubcontractors.length}</span>
+                    </button>
+                    <button
+                      onClick={() => { setActiveTab('contacts'); setShowSettingsMenu(false); }}
+                      className={`w-full text-left px-4 py-2 text-sm hover:bg-secondary-50 flex items-center gap-2 ${activeTab === 'contacts' ? 'text-primary-600 bg-primary-50' : 'text-secondary-700'}`}
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                      </svg>
+                      Contacts
+                      <span className="ml-auto text-xs text-secondary-400">{contacts.length}</span>
+                    </button>
+                  </div>
+                  </>
+                )}
+              </div>
             </nav>
           </div>
 
@@ -766,17 +914,143 @@ export default function ProjectDetail() {
               </div>
             )}
 
+            {/* Shifts Tab */}
+            {activeTab === 'shifts' && (
+              <>
+                {/* Show Site Issues Tracker if active */}
+                {showSiteIssues ? (
+                  <SiteIssuesTracker
+                    projectId={projectId!}
+                    onClose={() => setShowSiteIssues(false)}
+                  />
+                ) : (
+                  <div className="space-y-6">
+                    {/* Header with action buttons */}
+                    <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-200">
+                      <div className="flex items-center gap-3">
+                        <h2 className="text-lg font-semibold text-gray-800">Shifts & Daily Log</h2>
+                        {getOpenSiteIssues().length > 0 && (
+                          <button
+                            onClick={() => setShowSiteIssues(true)}
+                            className="px-2.5 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full hover:bg-red-200 transition-colors flex items-center gap-1"
+                          >
+                            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                            {getOpenSiteIssues().length} Open Issue{getOpenSiteIssues().length !== 1 ? 's' : ''}
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setShowSiteIssues(true)}
+                          className="px-3 py-2 text-sm border border-red-200 text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-1.5"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                          </svg>
+                          Site Issues
+                        </button>
+                        <button
+                          onClick={() => {
+                            setPdrDate(new Date().toISOString().split('T')[0]);
+                            setSelectedPDR(null);
+                            setShowPDRModal(true);
+                          }}
+                          className="px-3 py-2 text-sm bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-colors flex items-center gap-1.5"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          Generate Daily Report
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Main content grid */}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                      {/* Left: Shift List */}
+                      <div>
+                        <ShiftList
+                          shifts={shifts}
+                          selectedShiftId={selectedShift?.id}
+                          onSelectShift={(shift) => {
+                            setSelectedShift(shift);
+                            setCurrentShift(shift);
+                            fetchShiftWorkers(shift.id);
+                          }}
+                          onCreateShift={() => setShowCreateShiftModal(true)}
+                          onDeleteShift={async (shiftId) => {
+                            await deleteShift(shiftId);
+                            // Clear selection if deleted shift was selected
+                            if (selectedShift?.id === shiftId) {
+                              setSelectedShift(null);
+                              setCurrentShift(null);
+                            }
+                          }}
+                        />
+                      </div>
+                      
+                      {/* Middle: Shift Detail or Daily Log Panel */}
+                      <div className="lg:border-l lg:pl-6 border-gray-200">
+                        {selectedShift ? (
+                          <ShiftDetail
+                            shift={selectedShift}
+                            onClose={() => {
+                              setSelectedShift(null);
+                              setCurrentShift(null);
+                            }}
+                            onOpenCloseout={() => setShowShiftCloseout(true)}
+                            onDeleteShift={async (shiftId) => {
+                              await deleteShift(shiftId);
+                              setSelectedShift(null);
+                              setCurrentShift(null);
+                            }}
+                          />
+                        ) : (
+                          <div className="flex flex-col items-center justify-center h-64 text-gray-400">
+                            <svg className="w-16 h-16 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <p className="text-sm">Select a shift to view details</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Right: Daily Log Panel */}
+                      <div className="lg:border-l lg:pl-6 border-gray-200">
+                        <DailyLogPanel
+                          projectId={projectId!}
+                          onOpenSiteIssues={() => setShowSiteIssues(true)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
             {/* Subcontractors Tab */}
             {activeTab === 'subcontractors' && (
               <div>
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-lg font-semibold text-secondary-900">Subcontractors</h3>
-                  <button
-                    onClick={() => openSubcontractorModal()}
-                    className="px-3 py-2 text-sm bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors"
-                  >
-                    + Add Subcontractor
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setShowDiscoverSubcontractorsModal(true)}
+                      className="px-3 py-2 text-sm border border-primary-600 text-primary-600 hover:bg-primary-50 rounded-lg transition-colors flex items-center gap-1"
+                      title="Discover subcontractors from submitted forms"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                      Discover
+                    </button>
+                    <button
+                      onClick={() => openSubcontractorModal()}
+                      className="px-3 py-2 text-sm bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors"
+                    >
+                      + Add Subcontractor
+                    </button>
+                  </div>
                 </div>
 
                 {activeSubcontractors.length === 0 ? (
@@ -889,56 +1163,69 @@ export default function ProjectDetail() {
               </div>
             )}
 
-            {/* Workers Tab */}
-            {activeTab === 'workers' && (
+            {/* Contacts Tab */}
+            {activeTab === 'contacts' && (
               <div>
                 <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-semibold text-secondary-900">Project Workers</h3>
-                  <button
-                    onClick={() => setShowWorkerModal(true)}
-                    className="px-3 py-2 text-sm bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors"
-                  >
-                    + Invite Worker
-                  </button>
+                  <h3 className="text-lg font-semibold text-secondary-900">Contacts</h3>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setShowDiscoverWorkersModal(true)}
+                      className="px-3 py-2 text-sm border border-primary-600 text-primary-600 hover:bg-primary-50 rounded-lg transition-colors flex items-center gap-1"
+                      title="Discover contacts from submitted forms"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                      Discover
+                    </button>
+                  </div>
                 </div>
 
-                {activeWorkers.length === 0 ? (
+                {contacts.length === 0 ? (
                   <div className="text-center py-8 text-secondary-500">
-                    <p className="mb-2">No workers assigned to this project yet.</p>
-                    <p className="text-sm">Click "Invite Worker" to add team members.</p>
+                    <p className="mb-2">No contacts in your list yet.</p>
+                    <p className="text-sm">Click "Discover" to find contacts from submitted forms.</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {activeWorkers.map((worker) => (
+                    {contacts.map((contact) => (
                       <div
-                        key={worker.id}
+                        key={contact.id}
                         className="p-4 rounded-lg border border-secondary-200 hover:border-primary-200 transition-colors"
                       >
                         <div className="flex justify-between items-start">
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center">
                               <span className="text-primary-700 font-semibold text-sm">
-                                {(worker.user_full_name ?? worker.user_email ?? 'W')[0].toUpperCase()}
+                                {contact.name[0].toUpperCase()}
                               </span>
                             </div>
                             <div>
                               <div className="font-medium text-secondary-900">
-                                {worker.user_full_name ?? worker.user_email ?? 'Worker'}
+                                {contact.name}
                               </div>
-                              <div className="text-sm text-secondary-500">
-                                {worker.user_email && worker.user_full_name ? worker.user_email : null}
-                              </div>
-                              <div className="text-xs text-secondary-500 mt-1">
-                                Added {new Date(worker.added_at).toLocaleDateString()}
-                              </div>
+                              {contact.email && (
+                                <div className="text-sm text-secondary-500">{contact.email}</div>
+                              )}
+                              {contact.phone && (
+                                <div className="text-sm text-secondary-500">{contact.phone}</div>
+                              )}
+                              {contact.company_name && (
+                                <div className="text-xs text-primary-600 mt-1">{contact.company_name}</div>
+                              )}
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="px-2 py-1 text-xs font-medium rounded bg-success-100 text-success-700">
-                              Active
+                            <span className={`px-2 py-1 text-xs font-medium rounded ${
+                              contact.source === 'discovered' 
+                                ? 'bg-blue-100 text-blue-700' 
+                                : 'bg-secondary-100 text-secondary-700'
+                            }`}>
+                              {contact.source === 'discovered' ? 'Discovered' : 'Manual'}
                             </span>
                             <button
-                              onClick={() => handleRemoveWorker(worker.id)}
+                              onClick={() => removeContact(contact.id)}
                               className="px-3 py-1.5 text-sm text-danger-600 hover:bg-danger-50 rounded-lg transition-colors"
                             >
                               Remove
@@ -946,26 +1233,10 @@ export default function ProjectDetail() {
                           </div>
                         </div>
                         
-                        {/* Subcontractor Assignment */}
-                        {activeSubcontractors.length > 0 && (
+                        {/* Notes */}
+                        {contact.notes && (
                           <div className="mt-3 pt-3 border-t border-secondary-100">
-                            <div className="flex items-center gap-2">
-                              <label className="text-xs text-secondary-500 whitespace-nowrap">
-                                Subcontractor:
-                              </label>
-                              <select
-                                value={worker.subcontractor_id ?? ''}
-                                onChange={(e) => updateWorkerSubcontractor(worker.id, e.target.value || null)}
-                                className="flex-1 px-2 py-1 text-sm rounded border border-secondary-200 bg-white focus:border-primary-500 focus:ring-1 focus:ring-primary-200 outline-none transition-all"
-                              >
-                                <option value="">None / Direct employee</option>
-                                {activeSubcontractors.map((sub) => (
-                                  <option key={sub.id} value={sub.id}>
-                                    {sub.company_name}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
+                            <div className="text-xs text-secondary-500">{contact.notes}</div>
                           </div>
                         )}
                       </div>
@@ -2133,6 +2404,88 @@ export default function ProjectDetail() {
             </div>
           ))}
         </div>
+      )}
+
+      {/* Create Shift Modal */}
+      {projectId && (
+        <CreateShiftModal
+          projectId={projectId}
+          isOpen={showCreateShiftModal}
+          onClose={() => setShowCreateShiftModal(false)}
+          onShiftCreated={(shiftId) => {
+            // Refresh shifts list
+            fetchShifts(projectId);
+            // Select the newly created shift
+            const newShift = shifts.find(s => s.id === shiftId);
+            if (newShift) {
+              setSelectedShift(newShift);
+              setCurrentShift(newShift);
+            }
+          }}
+        />
+      )}
+
+      {/* Shift Closeout Modal */}
+      {selectedShift && showShiftCloseout && (
+        <ShiftCloseout
+          shift={selectedShift}
+          workers={shiftWorkers}
+          onClose={() => setShowShiftCloseout(false)}
+          onComplete={() => {
+            setShowShiftCloseout(false);
+            if (projectId) {
+              fetchShifts(projectId);
+            }
+            // Update selected shift to reflect completion
+            const updatedShift = shifts.find(s => s.id === selectedShift.id);
+            if (updatedShift) {
+              setSelectedShift({ ...updatedShift, status: 'completed' });
+            }
+          }}
+        />
+      )}
+
+      {/* Project Daily Report Modal */}
+      {showPDRModal && projectId && project && (
+        <ProjectDailyReportModal
+          projectId={projectId}
+          projectName={project.name}
+          reportDate={pdrDate}
+          existingReport={selectedPDR ?? undefined}
+          onClose={() => {
+            setShowPDRModal(false);
+            setSelectedPDR(null);
+          }}
+          onGenerated={(report) => {
+            fetchDailyReports(projectId);
+          }}
+        />
+      )}
+
+      {/* Discover Contacts Modal */}
+      {projectId && showDiscoverWorkersModal && (
+        <DiscoverFromFormsModal
+          projectId={projectId}
+          mode="workers"
+          onClose={() => {
+            setShowDiscoverWorkersModal(false);
+            // Refresh contacts list after adding
+            fetchContacts();
+          }}
+        />
+      )}
+
+      {/* Discover Subcontractors Modal */}
+      {projectId && showDiscoverSubcontractorsModal && (
+        <DiscoverFromFormsModal
+          projectId={projectId}
+          mode="subcontractors"
+          onClose={() => {
+            setShowDiscoverSubcontractorsModal(false);
+            // Refresh subcontractors list after adding
+            fetchSubcontractors(projectId);
+          }}
+        />
       )}
 
       {/* Animation keyframes (injected via style tag) */}

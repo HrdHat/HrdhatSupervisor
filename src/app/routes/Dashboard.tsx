@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 import { supabase } from '@/config/supabaseClient';
 import { useAuthStore } from '@/stores/authStore';
@@ -12,7 +12,13 @@ interface DocumentStats {
   todayCount: number;
 }
 
+interface ShiftStats {
+  activeShifts: number;
+  pendingForms: number;
+}
+
 export default function Dashboard() {
+  const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
 
@@ -21,7 +27,9 @@ export default function Dashboard() {
   const fetchProjects = useSupervisorStore((s) => s.fetchProjects);
 
   const [docStats, setDocStats] = useState<DocumentStats>({ total: 0, unsorted: 0, filed: 0, todayCount: 0 });
+  const [shiftStats, setShiftStats] = useState<ShiftStats>({ activeShifts: 0, pendingForms: 0 });
   const [loadingDocs, setLoadingDocs] = useState(false);
+  const [showProjectPicker, setShowProjectPicker] = useState(false);
 
   useEffect(() => {
     fetchProjects();
@@ -61,6 +69,28 @@ export default function Dashboard() {
         };
 
         setDocStats(stats);
+
+        // Also fetch shift stats
+        const { data: shifts } = await supabase
+          .from('project_shifts')
+          .select('id, status, worker_count:shift_workers(count)')
+          .in('project_id', projectIds)
+          .eq('status', 'active');
+
+        if (shifts) {
+          const activeCount = shifts.length;
+          // Count workers who haven't submitted forms in active shifts
+          const { data: pendingWorkers } = await supabase
+            .from('shift_workers')
+            .select('id, shift_id, form_submitted')
+            .eq('form_submitted', false)
+            .in('shift_id', shifts.map(s => s.id));
+
+          setShiftStats({
+            activeShifts: activeCount,
+            pendingForms: pendingWorkers?.length ?? 0,
+          });
+        }
       } catch (err) {
         console.error('Error fetching document stats:', err);
       } finally {
@@ -149,10 +179,20 @@ export default function Dashboard() {
         )}
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
           <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border border-slate-700/50">
             <div className="text-sm font-medium text-slate-400">Active Projects</div>
             <div className="text-3xl font-bold text-[#d1bd23] mt-2">{activeProjects.length}</div>
+          </div>
+          {/* Active Shifts Card */}
+          <div className={`rounded-xl p-6 backdrop-blur-sm ${shiftStats.activeShifts > 0 ? 'bg-blue-500/10 border-2 border-blue-500/30' : 'bg-slate-800/50 border border-slate-700/50'}`}>
+            <div className="text-sm font-medium text-slate-400">Active Shifts</div>
+            <div className={`text-3xl font-bold mt-2 ${shiftStats.activeShifts > 0 ? 'text-blue-400' : 'text-white'}`}>
+              {loadingDocs ? '...' : shiftStats.activeShifts}
+            </div>
+            {shiftStats.pendingForms > 0 && (
+              <div className="text-xs text-blue-300 mt-1">{shiftStats.pendingForms} pending forms</div>
+            )}
           </div>
           <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border border-slate-700/50">
             <div className="text-sm font-medium text-slate-400">Total Documents</div>
@@ -184,6 +224,17 @@ export default function Dashboard() {
         <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border border-slate-700/50 mb-8">
           <h3 className="text-lg font-semibold text-white mb-4">Quick Actions</h3>
           <div className="flex flex-wrap gap-4">
+            {/* Start New Shift - Primary Action */}
+            <button
+              onClick={() => setShowProjectPicker(true)}
+              disabled={activeProjects.length === 0}
+              className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white rounded-xl transition-all font-semibold flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-500/25"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Start New Shift
+            </button>
             <Link
               to="/projects"
               className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-xl transition-colors border border-slate-600"
@@ -197,6 +248,11 @@ export default function Dashboard() {
               Create New Project
             </Link>
           </div>
+          {activeProjects.length === 0 && (
+            <p className="text-sm text-slate-400 mt-3">
+              Create a project first to start a new shift.
+            </p>
+          )}
         </div>
 
         {/* Recent Projects */}
@@ -246,6 +302,82 @@ export default function Dashboard() {
           )}
         </div>
       </main>
+
+      {/* Project Picker Modal for New Shift */}
+      {showProjectPicker && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-screen items-center justify-center p-4">
+            {/* Backdrop */}
+            <div
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+              onClick={() => setShowProjectPicker(false)}
+            />
+
+            {/* Modal */}
+            <div className="relative bg-slate-800 rounded-2xl shadow-2xl max-w-md w-full border border-slate-700">
+              {/* Header */}
+              <div className="px-6 py-4 border-b border-slate-700">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-xl font-semibold text-white">Start New Shift</h2>
+                    <p className="text-sm text-slate-400 mt-1">Select a project</p>
+                  </div>
+                  <button
+                    onClick={() => setShowProjectPicker(false)}
+                    className="p-2 text-slate-400 hover:text-white transition-colors"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              {/* Project List */}
+              <div className="px-6 py-4 max-h-80 overflow-y-auto">
+                {activeProjects.length === 0 ? (
+                  <p className="text-slate-400 text-center py-4">No active projects available.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {activeProjects.map((project) => (
+                      <button
+                        key={project.id}
+                        onClick={() => {
+                          setShowProjectPicker(false);
+                          navigate(`/projects/${project.id}?tab=shifts&newShift=true`);
+                        }}
+                        className="w-full text-left p-4 rounded-xl border border-slate-600 hover:border-blue-500 hover:bg-slate-700/50 transition-all group"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h4 className="font-medium text-white group-hover:text-blue-300">{project.name}</h4>
+                            {project.site_address && (
+                              <p className="text-sm text-slate-400 mt-0.5">{project.site_address}</p>
+                            )}
+                          </div>
+                          <svg className="w-5 h-5 text-slate-500 group-hover:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 py-4 border-t border-slate-700 bg-slate-800/50 rounded-b-2xl">
+                <button
+                  onClick={() => setShowProjectPicker(false)}
+                  className="w-full px-4 py-2 text-slate-400 hover:text-white transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style>{`
         @keyframes pulse {

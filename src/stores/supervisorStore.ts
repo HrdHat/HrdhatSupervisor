@@ -11,6 +11,33 @@ import type {
   CreateFolderInput,
   CreateSubcontractorInput,
   UpdateSubcontractorInput,
+  // Shift types
+  ProjectShift,
+  ProjectShiftWithStats,
+  ShiftWorker,
+  CreateShiftInput,
+  UpdateShiftInput,
+  AddShiftWorkerInput,
+  CloseoutShiftInput,
+  CloseoutChecklistItem,
+  // Shift tasks/notes types
+  ShiftTask,
+  ShiftNote,
+  CustomCategory,
+  // Discovery types
+  DiscoveredWorker,
+  DiscoveredSubcontractor,
+  // Contact types
+  SupervisorContact,
+  CreateContactInput,
+  // Daily Log & PDR types
+  ProjectDailyLog,
+  ProjectDailyReport,
+  DailyLogType,
+  CreateDailyLogInput,
+  UpdateDailyLogInput,
+  CreateDailyReportInput,
+  SiteIssueStatus,
 } from '@/types/supervisor';
 import { getEffectiveMetadata } from '@/types/supervisor';
 
@@ -34,6 +61,10 @@ interface SupervisorState {
   workers: ProjectWorker[];
   subcontractors: ProjectSubcontractor[];
   documents: ReceivedDocument[];
+  shifts: ProjectShiftWithStats[];
+  currentShift: ProjectShiftWithStats | null;
+  shiftWorkers: ShiftWorker[];
+  contacts: SupervisorContact[];
 
   // UI State
   loading: boolean;
@@ -88,6 +119,75 @@ interface SupervisorState {
   updateDocumentRealtime: (documentId: string, changes: Partial<ReceivedDocument>) => void;
   removeDocumentRealtime: (documentId: string) => void;
 
+  // Shift Actions
+  fetchShifts: (projectId: string) => Promise<void>;
+  createShift: (input: CreateShiftInput) => Promise<ProjectShift | null>;
+  updateShift: (shiftId: string, input: UpdateShiftInput) => Promise<void>;
+  deleteShift: (shiftId: string) => Promise<void>;
+  activateShift: (shiftId: string) => Promise<void>;
+  setCurrentShift: (shift: ProjectShiftWithStats | null) => void;
+  
+  // Shift Worker Actions
+  fetchShiftWorkers: (shiftId: string) => Promise<void>;
+  addShiftWorker: (input: AddShiftWorkerInput) => Promise<ShiftWorker | null>;
+  addExistingWorkersToShift: (shiftId: string, projectWorkerIds: string[]) => Promise<ShiftWorker[]>;
+  removeShiftWorker: (shiftWorkerId: string) => Promise<void>;
+  updateShiftWorkerNotificationStatus: (shiftWorkerId: string, status: ShiftWorker['notification_status'], error?: string) => Promise<void>;
+  markShiftWorkerFormSubmitted: (shiftWorkerId: string, documentId: string) => Promise<void>;
+  
+  // Shift Closeout Actions
+  closeoutShift: (input: CloseoutShiftInput) => Promise<void>;
+  
+  // Shift Notification Actions
+  sendShiftNotifications: (shiftId: string) => Promise<{ success: boolean; sent: number; failed: number; message: string }>;
+  
+  // Shift Helpers
+  getShiftById: (shiftId: string) => ProjectShiftWithStats | undefined;
+  getActiveShifts: () => ProjectShiftWithStats[];
+  getShiftFormProgress: (shiftId: string) => { submitted: number; total: number; percentage: number };
+  getDocumentsByShift: (shiftId: string) => ReceivedDocument[];
+
+  // Shift Task/Note Actions (supervisor-only planning)
+  addShiftTask: (shiftId: string, task: Omit<ShiftTask, 'id' | 'created_at'>) => Promise<void>;
+  toggleShiftTask: (shiftId: string, taskId: string) => Promise<void>;
+  removeShiftTask: (shiftId: string, taskId: string) => Promise<void>;
+  addShiftNote: (shiftId: string, note: Omit<ShiftNote, 'id' | 'created_at'>) => Promise<void>;
+  updateShiftNote: (shiftId: string, noteId: string, content: string) => Promise<void>;
+  removeShiftNote: (shiftId: string, noteId: string) => Promise<void>;
+  addCustomCategory: (shiftId: string, category: Omit<CustomCategory, 'id'>) => Promise<void>;
+  removeCustomCategory: (shiftId: string, categoryId: string) => Promise<void>;
+  getTasksByCategory: (shiftId: string, category: string) => ShiftTask[];
+  getNotesByCategory: (shiftId: string, category: string) => ShiftNote[];
+  getTaskCompletionByCategory: (shiftId: string) => Record<string, { total: number; completed: number }>;
+
+  // AI Discovery Actions
+  discoverWorkersFromDocuments: (projectId: string) => Promise<DiscoveredWorker[]>;
+  discoverSubcontractorsFromDocuments: (projectId: string) => Promise<DiscoveredSubcontractor[]>;
+
+  // Contact Actions
+  fetchContacts: () => Promise<void>;
+  addContact: (input: CreateContactInput) => Promise<SupervisorContact | null>;
+  removeContact: (contactId: string) => Promise<void>;
+
+  // Daily Log Actions
+  dailyLogs: ProjectDailyLog[];
+  dailyReports: ProjectDailyReport[];
+  fetchDailyLogs: (projectId: string, date?: string) => Promise<void>;
+  addDailyLog: (input: CreateDailyLogInput) => Promise<ProjectDailyLog | null>;
+  updateDailyLog: (logId: string, input: UpdateDailyLogInput) => Promise<void>;
+  deleteDailyLog: (logId: string) => Promise<void>;
+  toggleSiteIssueStatus: (logId: string, newStatus: SiteIssueStatus) => Promise<void>;
+  getDailyLogsByDate: (date: string) => ProjectDailyLog[];
+  getDailyLogsByType: (date: string, logType: DailyLogType) => ProjectDailyLog[];
+  getOpenSiteIssues: () => ProjectDailyLog[];
+  
+  // PDR Actions
+  fetchDailyReports: (projectId: string) => Promise<void>;
+  generateDailyReport: (input: CreateDailyReportInput) => Promise<ProjectDailyReport | null>;
+  updateDailyReport: (reportId: string, weather?: CreateDailyReportInput['weather'], summaryNotes?: string) => Promise<void>;
+  deleteDailyReport: (reportId: string) => Promise<void>;
+  getDailyReportByDate: (date: string) => ProjectDailyReport | undefined;
+
   // Utilities
   clearError: () => void;
   generateProcessingEmail: (projectName: string) => string;
@@ -101,6 +201,12 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
   workers: [],
   subcontractors: [],
   documents: [],
+  shifts: [],
+  currentShift: null,
+  shiftWorkers: [],
+  contacts: [],
+  dailyLogs: [],
+  dailyReports: [],
   loading: false,
   error: null,
 
@@ -163,7 +269,7 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
   },
 
   setCurrentProject: (project) => {
-    set({ currentProject: project, folders: [], workers: [], subcontractors: [], documents: [] });
+    set({ currentProject: project, folders: [], workers: [], subcontractors: [], documents: [], shifts: [], currentShift: null, shiftWorkers: [], contacts: [], dailyLogs: [], dailyReports: [] });
   },
 
   createProjectWithSetup: async (input, selectedFormTypes) => {
@@ -402,6 +508,10 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
   addWorker: async (projectId, userEmail, subcontractorId) => {
     set({ loading: true, error: null });
 
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/0fb85a1d-a3b1-4c77-bfeb-610e3c7231e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'supervisorStore.ts:addWorker:entry',message:'addWorker called',data:{projectId,userEmail,subcontractorId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2,H4'})}).catch(()=>{});
+    // #endregion
+
     try {
       // First, find the user by email
       const { data: userData, error: userError } = await supabase
@@ -409,6 +519,10 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
         .select('id')
         .eq('email', userEmail)
         .single();
+
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/0fb85a1d-a3b1-4c77-bfeb-610e3c7231e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'supervisorStore.ts:addWorker:userLookup',message:'User lookup result',data:{userEmail,found:!!userData,userId:userData?.id,error:userError?.message},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H4'})}).catch(()=>{});
+      // #endregion
 
       if (userError || !userData) {
         throw new Error('User not found with that email address');
@@ -433,6 +547,10 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
         .select()
         .single();
 
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/0fb85a1d-a3b1-4c77-bfeb-610e3c7231e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'supervisorStore.ts:addWorker:insertResult',message:'Insert result',data:{success:!!data,workerId:data?.id,error:error?.message},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5'})}).catch(()=>{});
+      // #endregion
+
       if (error) throw error;
 
       // Get subcontractor name if applicable
@@ -450,6 +568,8 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to add worker';
       set({ error: message, loading: false });
+      // Re-throw so the caller knows the operation failed
+      throw error;
     }
   },
 
@@ -1048,6 +1168,1405 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
     set((state) => ({
       documents: state.documents.filter((doc) => doc.id !== documentId),
     }));
+  },
+
+  // ============================================================================
+  // Shift Actions
+  // ============================================================================
+
+  fetchShifts: async (projectId) => {
+    set({ loading: true, error: null });
+
+    try {
+      // Fetch shifts with worker counts
+      const { data: shiftsData, error: shiftsError } = await supabase
+        .from('project_shifts')
+        .select('*')
+        .eq('project_id', projectId)
+        .order('scheduled_date', { ascending: false });
+
+      if (shiftsError) throw shiftsError;
+
+      // For each shift, get worker counts
+      const shiftsWithStats: ProjectShiftWithStats[] = await Promise.all(
+        (shiftsData ?? []).map(async (shift) => {
+          const { count: workerCount } = await supabase
+            .from('shift_workers')
+            .select('*', { count: 'exact', head: true })
+            .eq('shift_id', shift.id);
+
+          const { count: submittedCount } = await supabase
+            .from('shift_workers')
+            .select('*', { count: 'exact', head: true })
+            .eq('shift_id', shift.id)
+            .eq('form_submitted', true);
+
+          return {
+            ...shift,
+            closeout_checklist: (shift.closeout_checklist as CloseoutChecklistItem[]) ?? [],
+            shift_tasks: (shift.shift_tasks as ShiftTask[]) ?? [],
+            shift_notes: (shift.shift_notes as ShiftNote[]) ?? [],
+            custom_categories: (shift.custom_categories as CustomCategory[]) ?? [],
+            worker_count: workerCount ?? 0,
+            forms_submitted: submittedCount ?? 0,
+          };
+        })
+      );
+
+      set({ shifts: shiftsWithStats, loading: false });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to fetch shifts';
+      set({ error: message, loading: false });
+    }
+  },
+
+  createShift: async (input) => {
+    set({ loading: true, error: null });
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) throw new Error('Not authenticated');
+
+      const { data, error } = await supabase
+        .from('project_shifts')
+        .insert({
+          project_id: input.project_id,
+          name: input.name,
+          scheduled_date: input.scheduled_date,
+          start_time: input.start_time ?? null,
+          end_time: input.end_time ?? null,
+          notes: input.notes ?? null,
+          shift_tasks: input.shift_tasks ?? [],
+          shift_notes: input.shift_notes ?? [],
+          custom_categories: input.custom_categories ?? [],
+          status: 'draft',
+          created_by: user.id,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const shiftWithStats: ProjectShiftWithStats = {
+        ...data,
+        closeout_checklist: (data.closeout_checklist as CloseoutChecklistItem[]) ?? [],
+        shift_tasks: (data.shift_tasks as ShiftTask[]) ?? [],
+        shift_notes: (data.shift_notes as ShiftNote[]) ?? [],
+        custom_categories: (data.custom_categories as CustomCategory[]) ?? [],
+        worker_count: 0,
+        forms_submitted: 0,
+      };
+
+      // Add to local state
+      set((state) => ({
+        shifts: [shiftWithStats, ...state.shifts],
+        loading: false,
+      }));
+
+      return data;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to create shift';
+      set({ error: message, loading: false });
+      return null;
+    }
+  },
+
+  updateShift: async (shiftId, input) => {
+    set({ loading: true, error: null });
+
+    try {
+      const updateData: Record<string, unknown> = {};
+
+      if (input.name !== undefined) updateData.name = input.name;
+      if (input.scheduled_date !== undefined) updateData.scheduled_date = input.scheduled_date;
+      if (input.start_time !== undefined) updateData.start_time = input.start_time;
+      if (input.end_time !== undefined) updateData.end_time = input.end_time;
+      if (input.status !== undefined) updateData.status = input.status;
+      if (input.notes !== undefined) updateData.notes = input.notes;
+      if (input.shift_tasks !== undefined) updateData.shift_tasks = input.shift_tasks;
+      if (input.shift_notes !== undefined) updateData.shift_notes = input.shift_notes;
+      if (input.custom_categories !== undefined) updateData.custom_categories = input.custom_categories;
+      if (input.closeout_checklist !== undefined) updateData.closeout_checklist = input.closeout_checklist;
+      if (input.closeout_notes !== undefined) updateData.closeout_notes = input.closeout_notes;
+      if (input.incomplete_reason !== undefined) updateData.incomplete_reason = input.incomplete_reason;
+
+      const { error } = await supabase
+        .from('project_shifts')
+        .update(updateData)
+        .eq('id', shiftId);
+
+      if (error) throw error;
+
+      // Update local state
+      set((state) => ({
+        shifts: state.shifts.map((s) =>
+          s.id === shiftId ? { ...s, ...updateData } as ProjectShiftWithStats : s
+        ),
+        currentShift: state.currentShift?.id === shiftId
+          ? { ...state.currentShift, ...updateData } as ProjectShiftWithStats
+          : state.currentShift,
+        loading: false,
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update shift';
+      set({ error: message, loading: false });
+    }
+  },
+
+  deleteShift: async (shiftId) => {
+    set({ loading: true, error: null });
+
+    try {
+      const { error } = await supabase
+        .from('project_shifts')
+        .delete()
+        .eq('id', shiftId);
+
+      if (error) throw error;
+
+      // Remove from local state
+      set((state) => ({
+        shifts: state.shifts.filter((s) => s.id !== shiftId),
+        currentShift: state.currentShift?.id === shiftId ? null : state.currentShift,
+        loading: false,
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to delete shift';
+      set({ error: message, loading: false });
+    }
+  },
+
+  activateShift: async (shiftId) => {
+    set({ loading: true, error: null });
+
+    try {
+      const { error } = await supabase
+        .from('project_shifts')
+        .update({ status: 'active' })
+        .eq('id', shiftId);
+
+      if (error) throw error;
+
+      // Update local state
+      set((state) => ({
+        shifts: state.shifts.map((s) =>
+          s.id === shiftId ? { ...s, status: 'active' as const } : s
+        ),
+        currentShift: state.currentShift?.id === shiftId
+          ? { ...state.currentShift, status: 'active' as const }
+          : state.currentShift,
+        loading: false,
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to activate shift';
+      set({ error: message, loading: false });
+    }
+  },
+
+  setCurrentShift: (shift) => {
+    set({ currentShift: shift, shiftWorkers: [] });
+  },
+
+  // ============================================================================
+  // Shift Worker Actions
+  // ============================================================================
+
+  fetchShiftWorkers: async (shiftId) => {
+    set({ loading: true, error: null });
+
+    try {
+      const { data, error } = await supabase
+        .from('shift_workers')
+        .select(`
+          *,
+          project_subcontractors(company_name)
+        `)
+        .eq('shift_id', shiftId)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+
+      // Flatten the joined data
+      const workersWithSubcontractor = (data ?? []).map((worker: any) => ({
+        ...worker,
+        subcontractor_name: worker.project_subcontractors?.company_name ?? null,
+      }));
+
+      set({ shiftWorkers: workersWithSubcontractor, loading: false });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to fetch shift workers';
+      set({ error: message, loading: false });
+    }
+  },
+
+  addShiftWorker: async (input) => {
+    set({ loading: true, error: null });
+
+    try {
+      const { data, error } = await supabase
+        .from('shift_workers')
+        .insert({
+          shift_id: input.shift_id,
+          worker_type: input.worker_type,
+          user_id: input.user_id ?? null,
+          subcontractor_id: input.subcontractor_id ?? null,
+          name: input.name,
+          phone: input.phone ?? null,
+          email: input.email ?? null,
+          notification_method: input.notification_method ?? 'sms',
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Get subcontractor name if applicable
+      let subcontractorName = null;
+      if (input.subcontractor_id) {
+        const sub = get().subcontractors.find(s => s.id === input.subcontractor_id);
+        subcontractorName = sub?.company_name ?? null;
+      }
+
+      const workerWithSubcontractor: ShiftWorker = {
+        ...data,
+        subcontractor_name: subcontractorName,
+      };
+
+      // Add to local state and update shift worker count
+      set((state) => ({
+        shiftWorkers: [...state.shiftWorkers, workerWithSubcontractor],
+        shifts: state.shifts.map((s) =>
+          s.id === input.shift_id ? { ...s, worker_count: s.worker_count + 1 } : s
+        ),
+        currentShift: state.currentShift?.id === input.shift_id
+          ? { ...state.currentShift, worker_count: state.currentShift.worker_count + 1 }
+          : state.currentShift,
+        loading: false,
+      }));
+
+      return workerWithSubcontractor;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to add shift worker';
+      set({ error: message, loading: false });
+      return null;
+    }
+  },
+
+  addExistingWorkersToShift: async (shiftId, projectWorkerIds) => {
+    set({ loading: true, error: null });
+
+    try {
+      // Get project workers details
+      const { data: projectWorkersData, error: fetchError } = await supabase
+        .from('project_workers')
+        .select(`
+          *,
+          user_profiles!project_workers_user_id_fkey(email, full_name, phone),
+          project_subcontractors(company_name)
+        `)
+        .in('id', projectWorkerIds);
+
+      if (fetchError) throw fetchError;
+
+      if (!projectWorkersData || projectWorkersData.length === 0) {
+        throw new Error('No workers found');
+      }
+
+      // Create shift workers from project workers
+      const shiftWorkersToInsert = projectWorkersData.map((pw: any) => ({
+        shift_id: shiftId,
+        worker_type: 'registered' as const,
+        user_id: pw.user_id,
+        subcontractor_id: pw.subcontractor_id,
+        name: pw.user_profiles?.full_name ?? pw.user_profiles?.email ?? 'Unknown',
+        phone: pw.user_profiles?.phone ?? null,
+        email: pw.user_profiles?.email ?? null,
+        notification_method: 'sms' as const,
+      }));
+
+      const { data, error } = await supabase
+        .from('shift_workers')
+        .insert(shiftWorkersToInsert)
+        .select();
+
+      if (error) throw error;
+
+      // Add subcontractor names to the result
+      const workersWithSubcontractor: ShiftWorker[] = (data ?? []).map((sw: any, index: number) => ({
+        ...sw,
+        subcontractor_name: (projectWorkersData[index] as any).project_subcontractors?.company_name ?? null,
+      }));
+
+      // Update local state
+      set((state) => ({
+        shiftWorkers: [...state.shiftWorkers, ...workersWithSubcontractor],
+        shifts: state.shifts.map((s) =>
+          s.id === shiftId ? { ...s, worker_count: s.worker_count + workersWithSubcontractor.length } : s
+        ),
+        currentShift: state.currentShift?.id === shiftId
+          ? { ...state.currentShift, worker_count: state.currentShift.worker_count + workersWithSubcontractor.length }
+          : state.currentShift,
+        loading: false,
+      }));
+
+      return workersWithSubcontractor;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to add workers to shift';
+      set({ error: message, loading: false });
+      return [];
+    }
+  },
+
+  removeShiftWorker: async (shiftWorkerId) => {
+    set({ loading: true, error: null });
+
+    try {
+      // Get shift_id before deleting
+      const worker = get().shiftWorkers.find(w => w.id === shiftWorkerId);
+      const shiftId = worker?.shift_id;
+
+      const { error } = await supabase
+        .from('shift_workers')
+        .delete()
+        .eq('id', shiftWorkerId);
+
+      if (error) throw error;
+
+      // Remove from local state and update shift worker count
+      set((state) => ({
+        shiftWorkers: state.shiftWorkers.filter((w) => w.id !== shiftWorkerId),
+        shifts: shiftId ? state.shifts.map((s) =>
+          s.id === shiftId ? { ...s, worker_count: Math.max(0, s.worker_count - 1) } : s
+        ) : state.shifts,
+        currentShift: state.currentShift?.id === shiftId
+          ? { ...state.currentShift, worker_count: Math.max(0, state.currentShift.worker_count - 1) }
+          : state.currentShift,
+        loading: false,
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to remove shift worker';
+      set({ error: message, loading: false });
+    }
+  },
+
+  updateShiftWorkerNotificationStatus: async (shiftWorkerId, status, errorMsg) => {
+    set({ loading: true, error: null });
+
+    try {
+      const updateData: Record<string, unknown> = {
+        notification_status: status,
+      };
+
+      if (status === 'sent' || status === 'delivered') {
+        updateData.notification_sent_at = new Date().toISOString();
+      }
+
+      if (errorMsg) {
+        updateData.notification_error = errorMsg;
+      }
+
+      const { error } = await supabase
+        .from('shift_workers')
+        .update(updateData)
+        .eq('id', shiftWorkerId);
+
+      if (error) throw error;
+
+      // Update local state
+      set((state) => ({
+        shiftWorkers: state.shiftWorkers.map((w) =>
+          w.id === shiftWorkerId ? { ...w, ...updateData } as ShiftWorker : w
+        ),
+        loading: false,
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update notification status';
+      set({ error: message, loading: false });
+    }
+  },
+
+  markShiftWorkerFormSubmitted: async (shiftWorkerId, documentId) => {
+    set({ loading: true, error: null });
+
+    try {
+      const worker = get().shiftWorkers.find(w => w.id === shiftWorkerId);
+      const shiftId = worker?.shift_id;
+
+      const { error } = await supabase
+        .from('shift_workers')
+        .update({
+          form_submitted: true,
+          form_submitted_at: new Date().toISOString(),
+          document_id: documentId,
+        })
+        .eq('id', shiftWorkerId);
+
+      if (error) throw error;
+
+      // Update local state
+      set((state) => ({
+        shiftWorkers: state.shiftWorkers.map((w) =>
+          w.id === shiftWorkerId
+            ? { ...w, form_submitted: true, form_submitted_at: new Date().toISOString(), document_id: documentId }
+            : w
+        ),
+        shifts: shiftId ? state.shifts.map((s) =>
+          s.id === shiftId ? { ...s, forms_submitted: s.forms_submitted + 1 } : s
+        ) : state.shifts,
+        currentShift: state.currentShift?.id === shiftId
+          ? { ...state.currentShift, forms_submitted: state.currentShift.forms_submitted + 1 }
+          : state.currentShift,
+        loading: false,
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to mark form as submitted';
+      set({ error: message, loading: false });
+    }
+  },
+
+  // ============================================================================
+  // Shift Closeout Actions
+  // ============================================================================
+
+  closeoutShift: async (input) => {
+    set({ loading: true, error: null });
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) throw new Error('Not authenticated');
+
+      const { error } = await supabase
+        .from('project_shifts')
+        .update({
+          status: 'completed',
+          closeout_checklist: input.closeout_checklist,
+          closeout_notes: input.closeout_notes ?? null,
+          incomplete_reason: input.incomplete_reason ?? null,
+          closed_at: new Date().toISOString(),
+          closed_by: user.id,
+        })
+        .eq('id', input.shift_id);
+
+      if (error) throw error;
+
+      // Update local state
+      set((state) => ({
+        shifts: state.shifts.map((s) =>
+          s.id === input.shift_id
+            ? {
+                ...s,
+                status: 'completed' as const,
+                closeout_checklist: input.closeout_checklist,
+                closeout_notes: input.closeout_notes ?? null,
+                incomplete_reason: input.incomplete_reason ?? null,
+                closed_at: new Date().toISOString(),
+                closed_by: user.id,
+              }
+            : s
+        ),
+        currentShift: state.currentShift?.id === input.shift_id
+          ? {
+              ...state.currentShift,
+              status: 'completed' as const,
+              closeout_checklist: input.closeout_checklist,
+              closeout_notes: input.closeout_notes ?? null,
+              incomplete_reason: input.incomplete_reason ?? null,
+              closed_at: new Date().toISOString(),
+              closed_by: user.id,
+            }
+          : state.currentShift,
+        loading: false,
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to close out shift';
+      set({ error: message, loading: false });
+    }
+  },
+
+  // ============================================================================
+  // Shift Notification Actions
+  // ============================================================================
+
+  sendShiftNotifications: async (shiftId) => {
+    set({ loading: true, error: null });
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) throw new Error('Not authenticated');
+
+      console.log('📧 Sending shift notifications for:', shiftId);
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-shift-notifications`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ shift_id: shiftId }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('✅ Notification result:', result);
+
+      // Refresh shift workers to get updated notification statuses
+      await get().fetchShiftWorkers(shiftId);
+
+      // Update shift status to active if it was in draft
+      const shift = get().shifts.find(s => s.id === shiftId);
+      if (shift?.status === 'draft') {
+        set((state) => ({
+          shifts: state.shifts.map((s) =>
+            s.id === shiftId ? { ...s, status: 'active' as const } : s
+          ),
+          currentShift: state.currentShift?.id === shiftId
+            ? { ...state.currentShift, status: 'active' as const }
+            : state.currentShift,
+        }));
+      }
+
+      set({ loading: false });
+
+      return {
+        success: true,
+        sent: result.sent ?? 0,
+        failed: result.failed ?? 0,
+        message: result.message ?? 'Notifications sent',
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to send notifications';
+      console.error('❌ Notification error:', message);
+      set({ error: message, loading: false });
+      return {
+        success: false,
+        sent: 0,
+        failed: 0,
+        message,
+      };
+    }
+  },
+
+  // ============================================================================
+  // Shift Helpers
+  // ============================================================================
+
+  getShiftById: (shiftId) => {
+    return get().shifts.find((s) => s.id === shiftId);
+  },
+
+  getActiveShifts: () => {
+    return get().shifts.filter((s) => s.status === 'active');
+  },
+
+  getShiftFormProgress: (shiftId) => {
+    const shift = get().shifts.find((s) => s.id === shiftId);
+    if (!shift) return { submitted: 0, total: 0, percentage: 0 };
+
+    const total = shift.worker_count;
+    const submitted = shift.forms_submitted;
+    const percentage = total > 0 ? Math.round((submitted / total) * 100) : 0;
+
+    return { submitted, total, percentage };
+  },
+
+  getDocumentsByShift: (shiftId) => {
+    return get().documents.filter((doc) => doc.shift_id === shiftId && doc.status !== 'rejected');
+  },
+
+  // ============================================================================
+  // Shift Task/Note Actions (supervisor-only planning)
+  // ============================================================================
+
+  addShiftTask: async (shiftId, task) => {
+    const shift = get().shifts.find((s) => s.id === shiftId);
+    if (!shift) return;
+
+    const newTask: ShiftTask = {
+      id: crypto.randomUUID(),
+      category: task.category,
+      content: task.content,
+      checked: task.checked,
+      created_at: new Date().toISOString(),
+    };
+
+    const updatedTasks = [...(shift.shift_tasks ?? []), newTask];
+
+    try {
+      const { error } = await supabase
+        .from('project_shifts')
+        .update({ shift_tasks: updatedTasks })
+        .eq('id', shiftId);
+
+      if (error) throw error;
+
+      set((state) => ({
+        shifts: state.shifts.map((s) =>
+          s.id === shiftId ? { ...s, shift_tasks: updatedTasks } : s
+        ),
+        currentShift: state.currentShift?.id === shiftId
+          ? { ...state.currentShift, shift_tasks: updatedTasks }
+          : state.currentShift,
+      }));
+    } catch (error) {
+      console.error('Failed to add shift task:', error);
+    }
+  },
+
+  toggleShiftTask: async (shiftId, taskId) => {
+    const shift = get().shifts.find((s) => s.id === shiftId);
+    if (!shift) return;
+
+    const updatedTasks = (shift.shift_tasks ?? []).map((t) =>
+      t.id === taskId ? { ...t, checked: !t.checked } : t
+    );
+
+    try {
+      const { error } = await supabase
+        .from('project_shifts')
+        .update({ shift_tasks: updatedTasks })
+        .eq('id', shiftId);
+
+      if (error) throw error;
+
+      set((state) => ({
+        shifts: state.shifts.map((s) =>
+          s.id === shiftId ? { ...s, shift_tasks: updatedTasks } : s
+        ),
+        currentShift: state.currentShift?.id === shiftId
+          ? { ...state.currentShift, shift_tasks: updatedTasks }
+          : state.currentShift,
+      }));
+    } catch (error) {
+      console.error('Failed to toggle shift task:', error);
+    }
+  },
+
+  removeShiftTask: async (shiftId, taskId) => {
+    const shift = get().shifts.find((s) => s.id === shiftId);
+    if (!shift) return;
+
+    const updatedTasks = (shift.shift_tasks ?? []).filter((t) => t.id !== taskId);
+
+    try {
+      const { error } = await supabase
+        .from('project_shifts')
+        .update({ shift_tasks: updatedTasks })
+        .eq('id', shiftId);
+
+      if (error) throw error;
+
+      set((state) => ({
+        shifts: state.shifts.map((s) =>
+          s.id === shiftId ? { ...s, shift_tasks: updatedTasks } : s
+        ),
+        currentShift: state.currentShift?.id === shiftId
+          ? { ...state.currentShift, shift_tasks: updatedTasks }
+          : state.currentShift,
+      }));
+    } catch (error) {
+      console.error('Failed to remove shift task:', error);
+    }
+  },
+
+  addShiftNote: async (shiftId, note) => {
+    const shift = get().shifts.find((s) => s.id === shiftId);
+    if (!shift) return;
+
+    const newNote: ShiftNote = {
+      id: crypto.randomUUID(),
+      category: note.category,
+      content: note.content,
+      created_at: new Date().toISOString(),
+    };
+
+    const updatedNotes = [...(shift.shift_notes ?? []), newNote];
+
+    try {
+      const { error } = await supabase
+        .from('project_shifts')
+        .update({ shift_notes: updatedNotes })
+        .eq('id', shiftId);
+
+      if (error) throw error;
+
+      set((state) => ({
+        shifts: state.shifts.map((s) =>
+          s.id === shiftId ? { ...s, shift_notes: updatedNotes } : s
+        ),
+        currentShift: state.currentShift?.id === shiftId
+          ? { ...state.currentShift, shift_notes: updatedNotes }
+          : state.currentShift,
+      }));
+    } catch (error) {
+      console.error('Failed to add shift note:', error);
+    }
+  },
+
+  updateShiftNote: async (shiftId, noteId, content) => {
+    const shift = get().shifts.find((s) => s.id === shiftId);
+    if (!shift) return;
+
+    const updatedNotes = (shift.shift_notes ?? []).map((n) =>
+      n.id === noteId ? { ...n, content } : n
+    );
+
+    try {
+      const { error } = await supabase
+        .from('project_shifts')
+        .update({ shift_notes: updatedNotes })
+        .eq('id', shiftId);
+
+      if (error) throw error;
+
+      set((state) => ({
+        shifts: state.shifts.map((s) =>
+          s.id === shiftId ? { ...s, shift_notes: updatedNotes } : s
+        ),
+        currentShift: state.currentShift?.id === shiftId
+          ? { ...state.currentShift, shift_notes: updatedNotes }
+          : state.currentShift,
+      }));
+    } catch (error) {
+      console.error('Failed to update shift note:', error);
+    }
+  },
+
+  removeShiftNote: async (shiftId, noteId) => {
+    const shift = get().shifts.find((s) => s.id === shiftId);
+    if (!shift) return;
+
+    const updatedNotes = (shift.shift_notes ?? []).filter((n) => n.id !== noteId);
+
+    try {
+      const { error } = await supabase
+        .from('project_shifts')
+        .update({ shift_notes: updatedNotes })
+        .eq('id', shiftId);
+
+      if (error) throw error;
+
+      set((state) => ({
+        shifts: state.shifts.map((s) =>
+          s.id === shiftId ? { ...s, shift_notes: updatedNotes } : s
+        ),
+        currentShift: state.currentShift?.id === shiftId
+          ? { ...state.currentShift, shift_notes: updatedNotes }
+          : state.currentShift,
+      }));
+    } catch (error) {
+      console.error('Failed to remove shift note:', error);
+    }
+  },
+
+  addCustomCategory: async (shiftId, category) => {
+    const shift = get().shifts.find((s) => s.id === shiftId);
+    if (!shift) return;
+
+    const newCategory: CustomCategory = {
+      id: crypto.randomUUID(),
+      name: category.name,
+      color: category.color,
+    };
+
+    const updatedCategories = [...(shift.custom_categories ?? []), newCategory];
+
+    try {
+      const { error } = await supabase
+        .from('project_shifts')
+        .update({ custom_categories: updatedCategories })
+        .eq('id', shiftId);
+
+      if (error) throw error;
+
+      set((state) => ({
+        shifts: state.shifts.map((s) =>
+          s.id === shiftId ? { ...s, custom_categories: updatedCategories } : s
+        ),
+        currentShift: state.currentShift?.id === shiftId
+          ? { ...state.currentShift, custom_categories: updatedCategories }
+          : state.currentShift,
+      }));
+    } catch (error) {
+      console.error('Failed to add custom category:', error);
+    }
+  },
+
+  removeCustomCategory: async (shiftId, categoryId) => {
+    const shift = get().shifts.find((s) => s.id === shiftId);
+    if (!shift) return;
+
+    const updatedCategories = (shift.custom_categories ?? []).filter((c) => c.id !== categoryId);
+
+    try {
+      const { error } = await supabase
+        .from('project_shifts')
+        .update({ custom_categories: updatedCategories })
+        .eq('id', shiftId);
+
+      if (error) throw error;
+
+      set((state) => ({
+        shifts: state.shifts.map((s) =>
+          s.id === shiftId ? { ...s, custom_categories: updatedCategories } : s
+        ),
+        currentShift: state.currentShift?.id === shiftId
+          ? { ...state.currentShift, custom_categories: updatedCategories }
+          : state.currentShift,
+      }));
+    } catch (error) {
+      console.error('Failed to remove custom category:', error);
+    }
+  },
+
+  getTasksByCategory: (shiftId, category) => {
+    const shift = get().shifts.find((s) => s.id === shiftId);
+    if (!shift) return [];
+    return (shift.shift_tasks ?? []).filter((t) => t.category === category);
+  },
+
+  getNotesByCategory: (shiftId, category) => {
+    const shift = get().shifts.find((s) => s.id === shiftId);
+    if (!shift) return [];
+    return (shift.shift_notes ?? []).filter((n) => n.category === category);
+  },
+
+  getTaskCompletionByCategory: (shiftId) => {
+    const shift = get().shifts.find((s) => s.id === shiftId);
+    if (!shift) return {};
+
+    const result: Record<string, { total: number; completed: number }> = {};
+    
+    for (const task of shift.shift_tasks ?? []) {
+      if (!result[task.category]) {
+        result[task.category] = { total: 0, completed: 0 };
+      }
+      result[task.category].total++;
+      if (task.checked) {
+        result[task.category].completed++;
+      }
+    }
+
+    return result;
+  },
+
+  // ============================================================================
+  // AI Discovery Actions
+  // ============================================================================
+
+  discoverWorkersFromDocuments: async (projectId) => {
+    const { documents, contacts } = get();
+
+    // Helper to parse email from "Name <email>" format
+    const parseEmail = (sourceEmail: string | null): string | null => {
+      if (!sourceEmail) return null;
+      const match = sourceEmail.match(/<([^>]+)>/);
+      return match ? match[1].toLowerCase() : sourceEmail.toLowerCase();
+    };
+
+    // Get documents for this project that have ai_extracted_data
+    const projectDocs = documents.filter(
+      (doc) => doc.project_id === projectId && doc.ai_extracted_data
+    );
+
+    // Build sets of existing contact names and emails (lowercased for comparison)
+    const existingContactNames = new Set<string>();
+    const existingContactEmails = new Set<string>();
+    contacts.forEach((c) => {
+      if (c.name) {
+        existingContactNames.add(c.name.toLowerCase().trim());
+      }
+      if (c.email) {
+        existingContactEmails.add(c.email.toLowerCase().trim());
+      }
+    });
+
+    // Extract unique worker names from documents
+    const workerMap = new Map<string, DiscoveredWorker>();
+
+    for (const doc of projectDocs) {
+      const extracted = doc.ai_extracted_data;
+      const workerName = extracted?.workerName as string | undefined;
+
+      if (workerName && workerName.trim()) {
+        const normalizedName = workerName.toLowerCase().trim();
+        const parsedEmail = parseEmail(doc.source_email);
+        
+        // Skip if already exists in contacts (by name OR email)
+        if (existingContactNames.has(normalizedName)) {
+          continue;
+        }
+        if (parsedEmail && existingContactEmails.has(parsedEmail)) {
+          continue;
+        }
+
+        const existing = workerMap.get(normalizedName);
+        if (existing) {
+          // Update count and last seen
+          existing.documentCount++;
+          if (new Date(doc.created_at) > new Date(existing.lastSeen)) {
+            existing.lastSeen = doc.created_at;
+            // Update email if source_email is available
+            if (doc.source_email) {
+              existing.email = parseEmail(doc.source_email);
+            }
+          }
+        } else {
+          // New discovery
+          workerMap.set(normalizedName, {
+            name: workerName.trim(),
+            email: parseEmail(doc.source_email),
+            companyName: (extracted?.companyName as string) || null,
+            documentCount: 1,
+            lastSeen: doc.created_at,
+          });
+        }
+      }
+    }
+
+    // Convert to array and sort by document count (most frequent first)
+    return Array.from(workerMap.values()).sort((a, b) => b.documentCount - a.documentCount);
+  },
+
+  discoverSubcontractorsFromDocuments: async (projectId) => {
+    const { documents, subcontractors } = get();
+
+    // Get documents for this project that have ai_extracted_data
+    const projectDocs = documents.filter(
+      (doc) => doc.project_id === projectId && doc.ai_extracted_data
+    );
+
+    // Build a set of existing subcontractor names (lowercased for comparison)
+    const existingCompanyNames = new Set<string>();
+    subcontractors
+      .filter((s) => s.project_id === projectId)
+      .forEach((s) => {
+        if (s.company_name) {
+          existingCompanyNames.add(s.company_name.toLowerCase().trim());
+        }
+      });
+
+    // Extract unique company names from documents
+    const companyMap = new Map<string, DiscoveredSubcontractor>();
+
+    for (const doc of projectDocs) {
+      const extracted = doc.ai_extracted_data;
+      const companyName = extracted?.companyName as string | undefined;
+
+      if (companyName && companyName.trim()) {
+        const normalizedName = companyName.toLowerCase().trim();
+
+        // Skip if already exists in project subcontractors
+        if (existingCompanyNames.has(normalizedName)) {
+          continue;
+        }
+
+        const existing = companyMap.get(normalizedName);
+        const workerName = extracted?.workerName as string | undefined;
+
+        if (existing) {
+          // Update count and last seen
+          existing.documentCount++;
+          if (new Date(doc.created_at) > new Date(existing.lastSeen)) {
+            existing.lastSeen = doc.created_at;
+          }
+          // Add worker name if not already in list
+          if (workerName && !existing.workerNames.includes(workerName.trim())) {
+            existing.workerNames.push(workerName.trim());
+          }
+        } else {
+          // New discovery
+          companyMap.set(normalizedName, {
+            companyName: companyName.trim(),
+            documentCount: 1,
+            lastSeen: doc.created_at,
+            workerNames: workerName ? [workerName.trim()] : [],
+          });
+        }
+      }
+    }
+
+    // Convert to array and sort by document count (most frequent first)
+    return Array.from(companyMap.values()).sort((a, b) => b.documentCount - a.documentCount);
+  },
+
+  // ============================================================================
+  // Contact Actions (Global per supervisor)
+  // ============================================================================
+
+  fetchContacts: async () => {
+    try {
+      // RLS ensures we only get our own contacts
+      const { data, error } = await supabase
+        .from('supervisor_contacts')
+        .select('*')
+        .order('recent_project_date', { ascending: false, nullsFirst: false });
+
+      if (error) throw error;
+      set({ contacts: data ?? [] });
+    } catch (error) {
+      console.error('Failed to fetch contacts:', error);
+    }
+  },
+
+  addContact: async (input) => {
+    set({ loading: true, error: null });
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) throw new Error('Not authenticated');
+
+      const { data, error } = await supabase
+        .from('supervisor_contacts')
+        .insert({
+          supervisor_id: user.id,
+          name: input.name,
+          email: input.email ?? null,
+          phone: input.phone ?? null,
+          company_name: input.company_name ?? null,
+          notes: input.notes ?? null,
+          source: input.source ?? 'manual',
+          recent_project_id: input.recent_project_id ?? null,
+          recent_project_date: input.recent_project_id ? new Date().toISOString() : null,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Add to local state
+      set((state) => ({
+        contacts: [data, ...state.contacts],
+        loading: false,
+      }));
+
+      return data;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to add contact';
+      set({ error: message, loading: false });
+      throw error;
+    }
+  },
+
+  removeContact: async (contactId) => {
+    set({ loading: true, error: null });
+
+    try {
+      const { error } = await supabase
+        .from('supervisor_contacts')
+        .delete()
+        .eq('id', contactId);
+
+      if (error) throw error;
+
+      // Remove from local state
+      set((state) => ({
+        contacts: state.contacts.filter((c) => c.id !== contactId),
+        loading: false,
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to remove contact';
+      set({ error: message, loading: false });
+    }
+  },
+
+  // ============================================================================
+  // Daily Log Actions
+  // ============================================================================
+
+  fetchDailyLogs: async (projectId, date) => {
+    set({ loading: true, error: null });
+
+    try {
+      let query = supabase
+        .from('project_daily_logs')
+        .select('*')
+        .eq('project_id', projectId)
+        .order('created_at', { ascending: false });
+
+      // Filter by date if provided
+      if (date) {
+        query = query.eq('log_date', date);
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+
+      set({ dailyLogs: data ?? [], loading: false });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to fetch daily logs';
+      set({ error: message, loading: false });
+    }
+  },
+
+  addDailyLog: async (input) => {
+    set({ loading: true, error: null });
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) throw new Error('Not authenticated');
+
+      // Use today's date if not provided
+      const logDate = input.log_date ?? new Date().toISOString().split('T')[0];
+
+      const { data, error } = await supabase
+        .from('project_daily_logs')
+        .insert({
+          project_id: input.project_id,
+          log_date: logDate,
+          log_type: input.log_type,
+          content: input.content,
+          metadata: input.metadata ?? {},
+          status: input.status ?? 'active',
+          created_by: user.id,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Add to local state
+      set((state) => ({
+        dailyLogs: [data, ...state.dailyLogs],
+        loading: false,
+      }));
+
+      return data;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to add daily log';
+      set({ error: message, loading: false });
+      return null;
+    }
+  },
+
+  updateDailyLog: async (logId, input) => {
+    set({ loading: true, error: null });
+
+    try {
+      const updateData: Record<string, unknown> = {};
+      
+      if (input.content !== undefined) updateData.content = input.content;
+      if (input.metadata !== undefined) updateData.metadata = input.metadata;
+      if (input.status !== undefined) updateData.status = input.status;
+
+      const { error } = await supabase
+        .from('project_daily_logs')
+        .update(updateData)
+        .eq('id', logId);
+
+      if (error) throw error;
+
+      // Update local state
+      set((state) => ({
+        dailyLogs: state.dailyLogs.map((log) =>
+          log.id === logId ? { ...log, ...updateData } as ProjectDailyLog : log
+        ),
+        loading: false,
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update daily log';
+      set({ error: message, loading: false });
+    }
+  },
+
+  deleteDailyLog: async (logId) => {
+    set({ loading: true, error: null });
+
+    try {
+      const { error } = await supabase
+        .from('project_daily_logs')
+        .delete()
+        .eq('id', logId);
+
+      if (error) throw error;
+
+      // Remove from local state
+      set((state) => ({
+        dailyLogs: state.dailyLogs.filter((log) => log.id !== logId),
+        loading: false,
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to delete daily log';
+      set({ error: message, loading: false });
+    }
+  },
+
+  toggleSiteIssueStatus: async (logId, newStatus) => {
+    set({ loading: true, error: null });
+
+    try {
+      const { error } = await supabase
+        .from('project_daily_logs')
+        .update({ status: newStatus })
+        .eq('id', logId);
+
+      if (error) throw error;
+
+      // Update local state
+      set((state) => ({
+        dailyLogs: state.dailyLogs.map((log) =>
+          log.id === logId ? { ...log, status: newStatus } : log
+        ),
+        loading: false,
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update site issue status';
+      set({ error: message, loading: false });
+    }
+  },
+
+  getDailyLogsByDate: (date) => {
+    return get().dailyLogs.filter((log) => log.log_date === date);
+  },
+
+  getDailyLogsByType: (date, logType) => {
+    return get().dailyLogs.filter(
+      (log) => log.log_date === date && log.log_type === logType
+    );
+  },
+
+  getOpenSiteIssues: () => {
+    return get().dailyLogs.filter(
+      (log) => log.log_type === 'site_issue' && log.status !== 'resolved'
+    );
+  },
+
+  // ============================================================================
+  // PDR (Project Daily Report) Actions
+  // ============================================================================
+
+  fetchDailyReports: async (projectId) => {
+    set({ loading: true, error: null });
+
+    try {
+      const { data, error } = await supabase
+        .from('project_daily_reports')
+        .select('*')
+        .eq('project_id', projectId)
+        .order('report_date', { ascending: false });
+
+      if (error) throw error;
+
+      set({ dailyReports: data ?? [], loading: false });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to fetch daily reports';
+      set({ error: message, loading: false });
+    }
+  },
+
+  generateDailyReport: async (input) => {
+    set({ loading: true, error: null });
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) throw new Error('Not authenticated');
+
+      const { data, error } = await supabase
+        .from('project_daily_reports')
+        .insert({
+          project_id: input.project_id,
+          report_date: input.report_date,
+          weather: input.weather ?? {},
+          summary_notes: input.summary_notes ?? null,
+          generated_by: user.id,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Add to local state
+      set((state) => ({
+        dailyReports: [data, ...state.dailyReports],
+        loading: false,
+      }));
+
+      return data;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to generate daily report';
+      set({ error: message, loading: false });
+      return null;
+    }
+  },
+
+  updateDailyReport: async (reportId, weather, summaryNotes) => {
+    set({ loading: true, error: null });
+
+    try {
+      const updateData: Record<string, unknown> = {};
+      
+      if (weather !== undefined) updateData.weather = weather;
+      if (summaryNotes !== undefined) updateData.summary_notes = summaryNotes;
+
+      const { error } = await supabase
+        .from('project_daily_reports')
+        .update(updateData)
+        .eq('id', reportId);
+
+      if (error) throw error;
+
+      // Update local state
+      set((state) => ({
+        dailyReports: state.dailyReports.map((report) =>
+          report.id === reportId ? { ...report, ...updateData } as ProjectDailyReport : report
+        ),
+        loading: false,
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update daily report';
+      set({ error: message, loading: false });
+    }
+  },
+
+  deleteDailyReport: async (reportId) => {
+    set({ loading: true, error: null });
+
+    try {
+      const { error } = await supabase
+        .from('project_daily_reports')
+        .delete()
+        .eq('id', reportId);
+
+      if (error) throw error;
+
+      // Remove from local state
+      set((state) => ({
+        dailyReports: state.dailyReports.filter((report) => report.id !== reportId),
+        loading: false,
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to delete daily report';
+      set({ error: message, loading: false });
+    }
+  },
+
+  getDailyReportByDate: (date) => {
+    return get().dailyReports.find((report) => report.report_date === date);
   },
 
   // ============================================================================

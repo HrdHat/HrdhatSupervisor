@@ -8,19 +8,25 @@ interface AuthState {
   loading: boolean;
   error: string | null;
   initialized: boolean;
+  lastActiveProjectId: string | null;
 
   // Actions
   initialize: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   clearError: () => void;
+  setLastActiveProject: (projectId: string) => void;
 }
+
+// LocalStorage key for persisting last active project
+const LAST_PROJECT_KEY = 'hrdhat_supervisor_last_project';
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   loading: false,
   error: null,
   initialized: false,
+  lastActiveProjectId: localStorage.getItem(LAST_PROJECT_KEY),
 
   initialize: async () => {
     if (get().initialized) return;
@@ -79,4 +85,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   clearError: () => set({ error: null }),
+
+  setLastActiveProject: (projectId: string) => {
+    localStorage.setItem(LAST_PROJECT_KEY, projectId);
+    set({ lastActiveProjectId: projectId });
+  },
 }));

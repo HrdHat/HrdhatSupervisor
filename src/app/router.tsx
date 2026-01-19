@@ -26,6 +26,19 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// Home route - redirects to last active project or projects list
+function HomeRedirect() {
+  const lastActiveProjectId = useAuthStore((s) => s.lastActiveProjectId);
+
+  // If there's a last active project, go directly to it
+  if (lastActiveProjectId) {
+    return <Navigate to={`/projects/${lastActiveProjectId}`} replace />;
+  }
+
+  // Otherwise show projects list (acts as project picker)
+  return <Navigate to="/projects" replace />;
+}
+
 export const router = createBrowserRouter([
   {
     path: '/login',
@@ -33,6 +46,14 @@ export const router = createBrowserRouter([
   },
   {
     path: '/',
+    element: (
+      <ProtectedRoute>
+        <HomeRedirect />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/dashboard',
     element: (
       <ProtectedRoute>
         <Dashboard />
