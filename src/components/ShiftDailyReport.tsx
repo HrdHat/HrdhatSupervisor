@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
-import type { ShiftTask, ShiftNote, CustomCategory, ShiftWorker, ReceivedDocument } from '@/types/supervisor';
+import { useState, useRef } from 'react';
+import type { ShiftTask, ShiftNote, CustomCategory, ReceivedDocument } from '@/types/supervisor';
 import { getCategoryInfo, SHIFT_CATEGORY_PRESETS } from '@/types/supervisor';
 
 // ============================================================================
@@ -137,8 +137,8 @@ export function ShiftDailyReport({
   onAddNote,
   onUpdateNote,
   onRemoveNote,
-  onAddCustomCategory,
-  onRemoveCustomCategory,
+  onAddCustomCategory: _onAddCustomCategory,
+  onRemoveCustomCategory: _onRemoveCustomCategory,
   readOnly = false,
   showQuickAdd = false,
   compact = false,

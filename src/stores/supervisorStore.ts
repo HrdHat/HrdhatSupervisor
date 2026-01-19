@@ -1536,16 +1536,24 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
       if (error) throw error;
 
       // Remove from local state and update shift worker count
-      set((state) => ({
-        shiftWorkers: state.shiftWorkers.filter((w) => w.id !== shiftWorkerId),
-        shifts: shiftId ? state.shifts.map((s) =>
-          s.id === shiftId ? { ...s, worker_count: Math.max(0, s.worker_count - 1) } : s
-        ) : state.shifts,
-        currentShift: state.currentShift?.id === shiftId
-          ? { ...state.currentShift, worker_count: Math.max(0, state.currentShift.worker_count - 1) }
-          : state.currentShift,
-        loading: false,
-      }));
+      set((state) => {
+        const updatedCurrentShift = state.currentShift?.id === shiftId && state.currentShift
+          ? { 
+              ...state.currentShift, 
+              worker_count: Math.max(0, state.currentShift.worker_count - 1),
+              forms_submitted: state.currentShift.forms_submitted ?? 0,
+            }
+          : state.currentShift;
+        
+        return {
+          shiftWorkers: state.shiftWorkers.filter((w) => w.id !== shiftWorkerId),
+          shifts: shiftId ? state.shifts.map((s) =>
+            s.id === shiftId ? { ...s, worker_count: Math.max(0, s.worker_count - 1) } : s
+          ) : state.shifts,
+          currentShift: updatedCurrentShift,
+          loading: false,
+        };
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to remove shift worker';
       set({ error: message, loading: false });
@@ -1607,20 +1615,28 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
       if (error) throw error;
 
       // Update local state
-      set((state) => ({
-        shiftWorkers: state.shiftWorkers.map((w) =>
-          w.id === shiftWorkerId
-            ? { ...w, form_submitted: true, form_submitted_at: new Date().toISOString(), document_id: documentId }
-            : w
-        ),
-        shifts: shiftId ? state.shifts.map((s) =>
-          s.id === shiftId ? { ...s, forms_submitted: s.forms_submitted + 1 } : s
-        ) : state.shifts,
-        currentShift: state.currentShift?.id === shiftId
-          ? { ...state.currentShift, forms_submitted: state.currentShift.forms_submitted + 1 }
-          : state.currentShift,
-        loading: false,
-      }));
+      set((state) => {
+        const updatedCurrentShift = state.currentShift?.id === shiftId && state.currentShift
+          ? { 
+              ...state.currentShift, 
+              forms_submitted: (state.currentShift.forms_submitted ?? 0) + 1,
+              worker_count: state.currentShift.worker_count ?? 0,
+            }
+          : state.currentShift;
+        
+        return {
+          shiftWorkers: state.shiftWorkers.map((w) =>
+            w.id === shiftWorkerId
+              ? { ...w, form_submitted: true, form_submitted_at: new Date().toISOString(), document_id: documentId }
+              : w
+          ),
+          shifts: shiftId ? state.shifts.map((s) =>
+            s.id === shiftId ? { ...s, forms_submitted: s.forms_submitted + 1 } : s
+          ) : state.shifts,
+          currentShift: updatedCurrentShift,
+          loading: false,
+        };
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to mark form as submitted';
       set({ error: message, loading: false });
@@ -2119,8 +2135,8 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
         if (existing) {
           // Update count and last seen
           existing.documentCount++;
-          if (new Date(doc.created_at) > new Date(existing.lastSeen)) {
-            existing.lastSeen = doc.created_at;
+          if (new Date(doc.received_at) > new Date(existing.lastSeen)) {
+            existing.lastSeen = doc.received_at;
             // Update email if source_email is available
             if (doc.source_email) {
               existing.email = parseEmail(doc.source_email);
@@ -2133,7 +2149,7 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
             email: parseEmail(doc.source_email),
             companyName: (extracted?.companyName as string) || null,
             documentCount: 1,
-            lastSeen: doc.created_at,
+            lastSeen: doc.received_at,
           });
         }
       }
@@ -2182,8 +2198,8 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
         if (existing) {
           // Update count and last seen
           existing.documentCount++;
-          if (new Date(doc.created_at) > new Date(existing.lastSeen)) {
-            existing.lastSeen = doc.created_at;
+          if (new Date(doc.received_at) > new Date(existing.lastSeen)) {
+            existing.lastSeen = doc.received_at;
           }
           // Add worker name if not already in list
           if (workerName && !existing.workerNames.includes(workerName.trim())) {
@@ -2194,7 +2210,7 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
           companyMap.set(normalizedName, {
             companyName: companyName.trim(),
             documentCount: 1,
-            lastSeen: doc.created_at,
+            lastSeen: doc.received_at,
             workerNames: workerName ? [workerName.trim()] : [],
           });
         }

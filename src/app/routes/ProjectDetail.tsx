@@ -15,8 +15,7 @@ import { DailyLogPanel } from '@/components/DailyLogPanel';
 import { SiteIssuesTracker } from '@/components/SiteIssuesTracker';
 import { ProjectDailyReportModal } from '@/components/ProjectDailyReportModal';
 import { QuickAddBar } from '@/components/QuickAddBar';
-import { LoggingSection } from '@/components/LoggingSection';
-import type { ReceivedDocument, DocumentFilters, DocumentMetadata, ProjectSubcontractor, CreateSubcontractorInput, ProjectShiftWithStats, ProjectDailyReport, DailyLogType } from '@/types/supervisor';
+import type { ReceivedDocument, DocumentFilters, DocumentMetadata, ProjectSubcontractor, CreateSubcontractorInput, ProjectShiftWithStats, ProjectDailyReport } from '@/types/supervisor';
 import { getEffectiveMetadata } from '@/types/supervisor';
 
 // Toast notification for new documents
@@ -32,14 +31,13 @@ export default function ProjectDetail() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Management panel state (for settings dropdown)
-  const [managementPanel, setManagementPanel] = useState<'folders' | 'contacts' | 'subcontractors' | null>(null);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   
   // Legacy tab state (for backwards compatibility during refactor)
   const [activeTab, setActiveTab] = useState<'folders' | 'contacts' | 'subcontractors' | 'documents' | 'shifts'>('shifts');
   
-  // Daily log add state
-  const [activeLogType, setActiveLogType] = useState<'visitor' | 'delivery' | 'manpower' | 'site_issue' | 'schedule_delay' | null>(null);
+  // Daily log type state (for QuickAddBar)
+  const [_activeLogType, setActiveLogType] = useState<'visitor' | 'delivery' | 'manpower' | 'site_issue' | 'schedule_delay' | null>(null);
   
   // Shift management state
   const [showCreateShiftModal, setShowCreateShiftModal] = useState(false);
@@ -136,6 +134,8 @@ export default function ProjectDetail() {
   const createSubcontractor = useSupervisorStore((s) => s.createSubcontractor);
   const updateSubcontractor = useSupervisorStore((s) => s.updateSubcontractor);
   const deleteSubcontractor = useSupervisorStore((s) => s.deleteSubcontractor);
+  const addWorker = useSupervisorStore((s) => s.addWorker);
+  // const removeWorker = useSupervisorStore((s) => s.removeWorker); // Kept for future use
   const getDocumentCountBySubcontractor = useSupervisorStore((s) => s.getDocumentCountBySubcontractor);
   const getWorkerCountBySubcontractor = useSupervisorStore((s) => s.getWorkerCountBySubcontractor);
   const moveDocumentToFolder = useSupervisorStore((s) => s.moveDocumentToFolder);
@@ -160,8 +160,6 @@ export default function ProjectDetail() {
   const deleteShift = useSupervisorStore((s) => s.deleteShift);
 
   // Daily Log & PDR store selectors
-  const dailyLogs = useSupervisorStore((s) => s.dailyLogs);
-  const dailyReports = useSupervisorStore((s) => s.dailyReports);
   const fetchDailyLogs = useSupervisorStore((s) => s.fetchDailyLogs);
   const fetchDailyReports = useSupervisorStore((s) => s.fetchDailyReports);
   const getOpenSiteIssues = useSupervisorStore((s) => s.getOpenSiteIssues);
@@ -275,11 +273,12 @@ export default function ProjectDetail() {
     }
   };
 
-  const handleRemoveWorker = async (workerId: string) => {
-    if (window.confirm('Are you sure you want to remove this worker from the project?')) {
-      await removeWorker(workerId);
-    }
-  };
+  // Worker removal handler - kept for future use
+  // const handleRemoveWorker = async (workerId: string) => {
+  //   if (window.confirm('Are you sure you want to remove this worker from the project?')) {
+  //     await removeWorker(workerId);
+  //   }
+  // };
 
   // Subcontractor handlers
   const openSubcontractorModal = (subcontractor?: ProjectSubcontractor) => {
@@ -553,9 +552,10 @@ export default function ProjectDetail() {
   }
 
   // Filter contacts by current project (or show all if no project filter needed)
-  const projectContacts = projectId 
-    ? contacts.filter((c) => c.recent_project_id === projectId || c.recent_project_id === null)
-    : contacts;
+  // Kept for future use
+  // const projectContacts = projectId 
+  //   ? contacts.filter((c) => c.recent_project_id === projectId || c.recent_project_id === null)
+  //   : contacts;
   const activeSubcontractors = subcontractors.filter((s) => s.status === 'active');
 
   return (
@@ -2456,7 +2456,7 @@ export default function ProjectDetail() {
             setShowPDRModal(false);
             setSelectedPDR(null);
           }}
-          onGenerated={(report) => {
+          onGenerated={(_report) => {
             fetchDailyReports(projectId);
           }}
         />

@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import type { ProjectShiftWithStats, DailyLogType, ProjectDailyReport } from '@/types/supervisor';
+import type { ProjectShiftWithStats, DailyLogType } from '@/types/supervisor';
 import { QuickAddBar } from './QuickAddBar';
 import { ShiftList } from './ShiftList';
 import { ShiftDetail } from './ShiftDetail';
@@ -32,12 +31,8 @@ export function LoggingSection({
   onOpenPDR,
   openSiteIssuesCount,
 }: LoggingSectionProps) {
-  const [activeLogType, setActiveLogType] = useState<DailyLogType | null>(null);
-  const [showLogForm, setShowLogForm] = useState(false);
-
-  const handleAddLog = (type: DailyLogType) => {
-    setActiveLogType(type);
-    setShowLogForm(true);
+  const handleAddLog = (_type: DailyLogType) => {
+    // TODO: Implement log form modal
   };
 
   return (
@@ -99,7 +94,7 @@ export function LoggingSection({
             ) : (
               <ShiftList
                 shifts={shifts}
-                selectedShiftId={selectedShift?.id}
+                selectedShiftId={undefined}
                 onSelectShift={onSelectShift}
                 onCreateShift={onCreateShift}
                 onDeleteShift={onDeleteShift}

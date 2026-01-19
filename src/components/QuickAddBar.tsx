@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import type { DailyLogType } from '@/types/supervisor';
-import { DAILY_LOG_TYPE_CONFIG } from '@/types/supervisor';
 
 interface QuickAddBarProps {
   onAddShift: () => void;

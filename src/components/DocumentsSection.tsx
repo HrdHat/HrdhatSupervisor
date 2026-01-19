@@ -28,7 +28,7 @@ interface DocumentsSectionProps {
   onSortChange: (sort: string) => void;
   onSelectAll: () => void;
   onDeselectAll: () => void;
-  onToggleDocSelection: (docId: string) => void;
+  onToggleDocSelection?: (docId: string) => void;
   onReprocessAll: () => void;
   onClearReprocessResult: () => void;
   onOpenQuickReview: (startIndex: number) => void;
@@ -69,7 +69,7 @@ export function DocumentsSection({
   onSortChange,
   onSelectAll,
   onDeselectAll,
-  onToggleDocSelection,
+  onToggleDocSelection: _onToggleDocSelection,
   onReprocessAll,
   onClearReprocessResult,
   onOpenQuickReview,

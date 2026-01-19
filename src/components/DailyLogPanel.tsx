@@ -232,19 +232,19 @@ function QuickAddForm({ logType, projectId, selectedDate, onAdded }: QuickAddFor
     let metadata: Record<string, unknown> = {};
     switch (logType) {
       case 'visitor':
-        metadata = visitorMeta;
+        metadata = { ...visitorMeta };
         break;
       case 'delivery':
-        metadata = deliveryMeta;
+        metadata = { ...deliveryMeta };
         break;
       case 'manpower':
-        metadata = manpowerMeta;
+        metadata = { ...manpowerMeta };
         break;
       case 'site_issue':
-        metadata = issueMeta;
+        metadata = { ...issueMeta };
         break;
       case 'schedule_delay':
-        metadata = scheduleMeta;
+        metadata = { ...scheduleMeta };
         break;
     }
 

@@ -3,7 +3,6 @@ import type {
   ProjectDailyReport,
   ProjectDailyLog,
   WeatherData,
-  DailyLogType,
   VisitorMetadata,
   DeliveryMetadata,
   ManpowerMetadata,

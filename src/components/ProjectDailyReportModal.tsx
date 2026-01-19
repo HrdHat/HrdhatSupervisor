@@ -440,7 +440,7 @@ export function ProjectDailyReportModal({
   const [weather, setWeather] = useState<WeatherData>(existingReport?.weather ?? {});
   const [summaryNotes, setSummaryNotes] = useState(existingReport?.summary_notes ?? '');
   const [isGenerating, setIsGenerating] = useState(false);
-  const [isSaved, setIsSaved] = useState(!!existingReport);
+  const [_isSaved, setIsSaved] = useState(!!existingReport);
 
   const dailyLogs = useSupervisorStore((s) => s.dailyLogs);
   const shifts = useSupervisorStore((s) => s.shifts);
