@@ -2,6 +2,13 @@ import { create } from 'zustand';
 
 import { supabase } from '@/config/supabaseClient';
 import type {
+  SupervisorFormInstance,
+  CreateSupervisorFormInput,
+  CombinedFormItem,
+  FormTypeId,
+} from '@/types/supervisorForms';
+import { getFormTypeConfig } from '@/types/supervisorForms';
+import type {
   SupervisorProject,
   ProjectFolder,
   ProjectWorker,
@@ -188,6 +195,16 @@ interface SupervisorState {
   deleteDailyReport: (reportId: string) => Promise<void>;
   getDailyReportByDate: (date: string) => ProjectDailyReport | undefined;
 
+  // Supervisor Forms State & Actions
+  supervisorForms: SupervisorFormInstance[];
+  fetchSupervisorForms: (projectId: string) => Promise<void>;
+  createSupervisorForm: (input: CreateSupervisorFormInput) => Promise<SupervisorFormInstance | null>;
+  saveSupervisorForm: (formId: string, formData: Record<string, unknown>) => Promise<void>;
+  deleteSupervisorForm: (formId: string) => Promise<void>;
+  archiveSupervisorForm: (formId: string) => Promise<void>;
+  getSupervisorFormById: (formId: string) => SupervisorFormInstance | undefined;
+  getCombinedFormItems: (projectId: string) => CombinedFormItem[];
+
   // Utilities
   clearError: () => void;
   generateProcessingEmail: (projectName: string) => string;
@@ -197,6 +214,7 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
   // Initial State
   projects: [],
   currentProject: null,
+  supervisorForms: [],
   folders: [],
   workers: [],
   subcontractors: [],
@@ -269,7 +287,7 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
   },
 
   setCurrentProject: (project) => {
-    set({ currentProject: project, folders: [], workers: [], subcontractors: [], documents: [], shifts: [], currentShift: null, shiftWorkers: [], contacts: [], dailyLogs: [], dailyReports: [] });
+    set({ currentProject: project, folders: [], workers: [], subcontractors: [], documents: [], shifts: [], currentShift: null, shiftWorkers: [], contacts: [], dailyLogs: [], dailyReports: [], supervisorForms: [] });
   },
 
   createProjectWithSetup: async (input, selectedFormTypes) => {
@@ -2583,6 +2601,247 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
 
   getDailyReportByDate: (date) => {
     return get().dailyReports.find((report) => report.report_date === date);
+  },
+
+  // ============================================================================
+  // Supervisor Forms Actions
+  // ============================================================================
+
+  fetchSupervisorForms: async (projectId) => {
+    set({ loading: true, error: null });
+
+    try {
+      const { data, error } = await supabase
+        .from('form_instances')
+        .select('*')
+        .eq('project_id', projectId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      set({ supervisorForms: (data ?? []) as SupervisorFormInstance[], loading: false });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to fetch supervisor forms';
+      set({ error: message, loading: false });
+    }
+  },
+
+  createSupervisorForm: async (input) => {
+    set({ loading: true, error: null });
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) throw new Error('Not authenticated');
+
+      // Generate unique form number (YYYYMMDD-NN format)
+      const today = new Date();
+      const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
+
+      // Get the highest number for today to find next available
+      const { data: existingForms } = await supabase
+        .from('form_instances')
+        .select('form_number')
+        .like('form_number', `${dateStr}-%`)
+        .order('form_number', { ascending: false })
+        .limit(1);
+
+      let nextNumber = 1;
+      if (existingForms && existingForms.length > 0) {
+        const lastFormNumber = existingForms[0].form_number;
+        const match = lastFormNumber.match(/-(\d+)$/);
+        if (match) {
+          nextNumber = parseInt(match[1]) + 1;
+        }
+      }
+
+      const formNumber = `${dateStr}-${nextNumber.toString().padStart(2, '0')}`;
+
+      // Get form type config for title
+      const formTypeConfig = getFormTypeConfig(input.template_id);
+      const title = input.title ?? formTypeConfig?.name ?? input.template_id;
+
+      // Create empty form data structure
+      const emptyFormData = {
+        modules: {},
+        templateId: input.template_id,
+      };
+
+      // Create form instance
+      const { data, error } = await supabase
+        .from('form_instances')
+        .insert({
+          template_id: input.template_id,
+          form_number: formNumber,
+          title: title,
+          created_by: user.id,
+          project_id: input.project_id,
+          form_data: emptyFormData,
+          status: 'active',
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const newForm = data as SupervisorFormInstance;
+
+      // Add to local state
+      set((state) => ({
+        supervisorForms: [newForm, ...state.supervisorForms],
+        loading: false,
+      }));
+
+      return newForm;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to create supervisor form';
+      set({ error: message, loading: false });
+      return null;
+    }
+  },
+
+  saveSupervisorForm: async (formId, formData) => {
+    set({ loading: true, error: null });
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) throw new Error('Not authenticated');
+
+      const { error } = await supabase
+        .from('form_instances')
+        .update({
+          form_data: formData,
+          updated_by: user.id,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', formId);
+
+      if (error) throw error;
+
+      // Update local state
+      set((state) => ({
+        supervisorForms: state.supervisorForms.map((form) =>
+          form.id === formId
+            ? { ...form, form_data: formData, updated_at: new Date().toISOString() }
+            : form
+        ),
+        loading: false,
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to save supervisor form';
+      set({ error: message, loading: false });
+    }
+  },
+
+  deleteSupervisorForm: async (formId) => {
+    set({ loading: true, error: null });
+
+    try {
+      const { error } = await supabase
+        .from('form_instances')
+        .delete()
+        .eq('id', formId);
+
+      if (error) throw error;
+
+      // Remove from local state
+      set((state) => ({
+        supervisorForms: state.supervisorForms.filter((form) => form.id !== formId),
+        loading: false,
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to delete supervisor form';
+      set({ error: message, loading: false });
+    }
+  },
+
+  archiveSupervisorForm: async (formId) => {
+    set({ loading: true, error: null });
+
+    try {
+      const { error } = await supabase
+        .from('form_instances')
+        .update({
+          status: 'archived',
+          submitted_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', formId);
+
+      if (error) throw error;
+
+      // Update local state
+      set((state) => ({
+        supervisorForms: state.supervisorForms.map((form) =>
+          form.id === formId
+            ? { ...form, status: 'archived' as const, submitted_at: new Date().toISOString() }
+            : form
+        ),
+        loading: false,
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to archive supervisor form';
+      set({ error: message, loading: false });
+    }
+  },
+
+  getSupervisorFormById: (formId) => {
+    return get().supervisorForms.find((form) => form.id === formId);
+  },
+
+  getCombinedFormItems: (projectId) => {
+    const { documents, supervisorForms } = get();
+    const combined: CombinedFormItem[] = [];
+
+    // Add received documents (worker submissions)
+    documents
+      .filter((doc) => doc.project_id === projectId && doc.status !== 'rejected')
+      .forEach((doc) => {
+        const formTypeConfig = doc.ai_classification ? getFormTypeConfig(doc.ai_classification as FormTypeId) : undefined;
+        combined.push({
+          id: doc.id,
+          type: 'received_document',
+          title: doc.original_filename ?? 'Submitted Form',
+          formType: doc.ai_classification ?? 'Unknown',
+          formTypeConfig,
+          status: doc.status,
+          createdAt: doc.received_at,
+          updatedAt: doc.processed_at ?? doc.received_at,
+          sourceEmail: doc.source_email ?? undefined,
+          aiClassification: doc.ai_classification ?? undefined,
+          confidenceScore: doc.confidence_score ?? undefined,
+          folderId: doc.folder_id,
+        });
+      });
+
+    // Add supervisor forms
+    supervisorForms
+      .filter((form) => form.project_id === projectId)
+      .forEach((form) => {
+        const formTypeConfig = getFormTypeConfig(form.template_id as FormTypeId);
+        combined.push({
+          id: form.id,
+          type: 'supervisor_form',
+          title: form.title ?? formTypeConfig?.name ?? form.template_id,
+          formType: formTypeConfig?.name ?? form.template_id,
+          formTypeConfig,
+          status: form.status,
+          createdAt: form.created_at,
+          updatedAt: form.updated_at,
+          formData: form.form_data,
+          templateId: form.template_id,
+        });
+      });
+
+    // Sort by created date, newest first
+    return combined.sort((a, b) => 
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
   },
 
   // ============================================================================

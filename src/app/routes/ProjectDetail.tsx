@@ -17,6 +17,9 @@ import { ProjectDailyReportModal } from '@/components/ProjectDailyReportModal';
 import { QuickAddBar } from '@/components/QuickAddBar';
 import { DailyLogModal } from '@/components/DailyLogModal';
 import { DailyLogList } from '@/components/DailyLogList';
+import { SupervisorFormsList } from '@/components/SupervisorFormsList';
+import { NewSupervisorFormPicker } from '@/components/NewSupervisorFormPicker';
+import { SupervisorFormEditor } from '@/components/SupervisorFormEditor';
 import type { ReceivedDocument, DocumentFilters, DocumentMetadata, ProjectSubcontractor, CreateSubcontractorInput, ProjectShiftWithStats, ProjectDailyReport, DailyLogType } from '@/types/supervisor';
 import { getEffectiveMetadata } from '@/types/supervisor';
 
@@ -35,8 +38,13 @@ export default function ProjectDetail() {
   // Management panel state (for settings dropdown)
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   
-  // Legacy tab state (for backwards compatibility during refactor)
-  const [activeTab, setActiveTab] = useState<'folders' | 'contacts' | 'subcontractors' | 'documents' | 'shifts'>('shifts');
+  // Tab state - 'documents' is now the primary "Forms" tab
+  const [activeTab, setActiveTab] = useState<'folders' | 'contacts' | 'subcontractors' | 'documents'>('documents');
+  
+  // Forms sub-tab state (within the Forms tab)
+  const [formsSubTab, setFormsSubTab] = useState<'received' | 'my_forms'>('received');
+  const [showFormPicker, setShowFormPicker] = useState(false);
+  const [editingFormId, setEditingFormId] = useState<string | null>(null);
   
   // Daily log modal state (for QuickAddBar)
   const [showDailyLogModal, setShowDailyLogModal] = useState(false);
@@ -169,6 +177,9 @@ export default function ProjectDetail() {
   const deleteDailyLog = useSupervisorStore((s) => s.deleteDailyLog);
   const getOpenSiteIssues = useSupervisorStore((s) => s.getOpenSiteIssues);
 
+  // Supervisor Forms store selectors
+  const fetchSupervisorForms = useSupervisorStore((s) => s.fetchSupervisorForms);
+
   const project = projects.find((p) => p.id === projectId);
 
   // Toast management
@@ -223,8 +234,9 @@ export default function ProjectDetail() {
       fetchShifts(projectId);
       fetchDailyLogs(projectId);
       fetchDailyReports(projectId);
+      fetchSupervisorForms(projectId);
     }
-  }, [projectId, setLastActiveProject, fetchFolders, fetchContacts, fetchSubcontractors, fetchDocuments, fetchShifts, fetchDailyLogs, fetchDailyReports]);
+  }, [projectId, setLastActiveProject, fetchFolders, fetchContacts, fetchSubcontractors, fetchDocuments, fetchShifts, fetchDailyLogs, fetchDailyReports, fetchSupervisorForms]);
 
   // Handle URL query parameters for deep linking (e.g., from Dashboard "Start New Shift")
   useEffect(() => {
@@ -729,36 +741,27 @@ export default function ProjectDetail() {
           />
         </div>
 
-        {/* Main Content Tabs - Reordered for logging focus */}
+        {/* Main Content Tabs */}
         <div className="bg-white rounded-xl shadow-card mt-6">
           <div className="border-b border-secondary-200">
             <nav className="flex -mb-px">
-              {/* Primary tabs: Shifts & Log, Documents */}
-              {(['shifts', 'documents'] as const).map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
-                    activeTab === tab
-                      ? 'border-primary-500 text-primary-600'
-                      : 'border-transparent text-secondary-500 hover:text-secondary-700'
-                  }`}
-                >
-                  {tab === 'shifts' ? 'Logging & Shifts' : 'Documents'}
-                  {/* Show badge for documents needing review */}
-                  {tab === 'documents' && unsortedCount > 0 && (
-                    <span className="bg-warning-500 text-white text-xs px-2 py-0.5 rounded-full animate-pulse">
-                      {unsortedCount}
-                    </span>
-                  )}
-                  {/* Show badge for active shifts */}
-                  {tab === 'shifts' && shifts.filter(s => s.status === 'active').length > 0 && (
-                    <span className="bg-blue-500 text-white text-xs px-2 py-0.5 rounded-full">
-                      {shifts.filter(s => s.status === 'active').length}
-                    </span>
-                  )}
-                </button>
-              ))}
+              {/* Primary tab: Forms (received + created) */}
+              <button
+                onClick={() => setActiveTab('documents')}
+                className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
+                  activeTab === 'documents'
+                    ? 'border-primary-500 text-primary-600'
+                    : 'border-transparent text-secondary-500 hover:text-secondary-700'
+                }`}
+              >
+                Forms
+                {/* Show badge for documents needing review */}
+                {unsortedCount > 0 && (
+                  <span className="bg-warning-500 text-white text-xs px-2 py-0.5 rounded-full animate-pulse">
+                    {unsortedCount}
+                  </span>
+                )}
+              </button>
               
               {/* Divider */}
               <div className="flex-1" />
@@ -931,120 +934,6 @@ export default function ProjectDetail() {
                   </div>
                 )}
               </div>
-            )}
-
-            {/* Shifts Tab */}
-            {activeTab === 'shifts' && (
-              <>
-                {/* Show Site Issues Tracker if active */}
-                {showSiteIssues ? (
-                  <SiteIssuesTracker
-                    projectId={projectId!}
-                    onClose={() => setShowSiteIssues(false)}
-                  />
-                ) : (
-                  <div className="space-y-6">
-                    {/* Header with action buttons */}
-                    <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-200">
-                      <div className="flex items-center gap-3">
-                        <h2 className="text-lg font-semibold text-gray-800">Shifts & Daily Log</h2>
-                        {getOpenSiteIssues().length > 0 && (
-                          <button
-                            onClick={() => setShowSiteIssues(true)}
-                            className="px-2.5 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full hover:bg-red-200 transition-colors flex items-center gap-1"
-                          >
-                            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                            {getOpenSiteIssues().length} Open Issue{getOpenSiteIssues().length !== 1 ? 's' : ''}
-                          </button>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setShowSiteIssues(true)}
-                          className="px-3 py-2 text-sm border border-red-200 text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-1.5"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                          </svg>
-                          Site Issues
-                        </button>
-                        <button
-                          onClick={() => {
-                            setPdrDate(new Date().toISOString().split('T')[0]);
-                            setSelectedPDR(null);
-                            setShowPDRModal(true);
-                          }}
-                          className="px-3 py-2 text-sm bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-colors flex items-center gap-1.5"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                          </svg>
-                          Generate Daily Report
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Main content grid */}
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                      {/* Left: Shift List */}
-                      <div>
-                        <ShiftList
-                          shifts={shifts}
-                          selectedShiftId={selectedShift?.id}
-                          onSelectShift={(shift) => {
-                            setSelectedShift(shift);
-                            setCurrentShift(shift);
-                            fetchShiftWorkers(shift.id);
-                          }}
-                          onCreateShift={() => setShowCreateShiftModal(true)}
-                          onDeleteShift={async (shiftId) => {
-                            await deleteShift(shiftId);
-                            // Clear selection if deleted shift was selected
-                            if (selectedShift?.id === shiftId) {
-                              setSelectedShift(null);
-                              setCurrentShift(null);
-                            }
-                          }}
-                        />
-                      </div>
-                      
-                      {/* Middle: Shift Detail or Daily Log Panel */}
-                      <div className="lg:border-l lg:pl-6 border-gray-200">
-                        {selectedShift ? (
-                          <ShiftDetail
-                            shift={selectedShift}
-                            onClose={() => {
-                              setSelectedShift(null);
-                              setCurrentShift(null);
-                            }}
-                            onOpenCloseout={() => setShowShiftCloseout(true)}
-                            onDeleteShift={async (shiftId) => {
-                              await deleteShift(shiftId);
-                              setSelectedShift(null);
-                              setCurrentShift(null);
-                            }}
-                          />
-                        ) : (
-                          <div className="flex flex-col items-center justify-center h-64 text-gray-400">
-                            <svg className="w-16 h-16 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            <p className="text-sm">Select a shift to view details</p>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Right: Daily Log Panel */}
-                      <div className="lg:border-l lg:pl-6 border-gray-200">
-                        <DailyLogPanel
-                          projectId={projectId!}
-                          onOpenSiteIssues={() => setShowSiteIssues(true)}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </>
             )}
 
             {/* Subcontractors Tab */}
@@ -1265,19 +1154,62 @@ export default function ProjectDetail() {
               </div>
             )}
 
-            {/* Documents Tab */}
+            {/* Forms Tab */}
             {activeTab === 'documents' && (
               <div>
-                {/* Header with Reprocess and Filter Buttons */}
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-                  <div>
-                    <h3 className="text-lg font-semibold text-secondary-900">Document Inbox</h3>
-                    <p className="text-sm text-secondary-500">
-                      {unsortedCount > 0 
-                        ? `${unsortedCount} document${unsortedCount !== 1 ? 's' : ''} need review`
-                        : 'All documents have been sorted'}
-                    </p>
+                {/* Forms Sub-tabs */}
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+                    <button
+                      onClick={() => setFormsSubTab('received')}
+                      className={`px-4 py-2 text-sm font-medium rounded-md transition-colors flex items-center gap-2 ${
+                        formsSubTab === 'received' 
+                          ? 'bg-white text-gray-900 shadow-sm' 
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      Received
+                      {unsortedCount > 0 && (
+                        <span className="bg-warning-500 text-white text-xs px-2 py-0.5 rounded-full">
+                          {unsortedCount}
+                        </span>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => setFormsSubTab('my_forms')}
+                      className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                        formsSubTab === 'my_forms' 
+                          ? 'bg-white text-gray-900 shadow-sm' 
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      My Forms
+                    </button>
                   </div>
+                </div>
+
+                {/* My Forms Sub-tab */}
+                {formsSubTab === 'my_forms' && projectId && (
+                  <SupervisorFormsList
+                    projectId={projectId}
+                    onCreateForm={() => setShowFormPicker(true)}
+                    onEditForm={(formId) => setEditingFormId(formId)}
+                  />
+                )}
+
+                {/* Received Documents Sub-tab */}
+                {formsSubTab === 'received' && (
+                  <div>
+                    {/* Header with Reprocess and Filter Buttons */}
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                      <div>
+                        <h3 className="text-lg font-semibold text-secondary-900">Received Forms</h3>
+                        <p className="text-sm text-secondary-500">
+                          {unsortedCount > 0 
+                            ? `${unsortedCount} form${unsortedCount !== 1 ? 's' : ''} need review`
+                            : 'All forms have been sorted'}
+                        </p>
+                      </div>
                   
                   <div className="flex items-center gap-2 flex-wrap">
                     {/* Sort Dropdown */}
@@ -1733,11 +1665,38 @@ export default function ProjectDetail() {
                     ))}
                   </div>
                 )}
+                  </div>
+                )}
               </div>
             )}
           </div>
         </div>
       </main>
+
+      {/* Form Picker Modal */}
+      {projectId && (
+        <NewSupervisorFormPicker
+          projectId={projectId}
+          isOpen={showFormPicker}
+          onClose={() => setShowFormPicker(false)}
+          onFormCreated={(formId) => {
+            setEditingFormId(formId);
+            setFormsSubTab('my_forms');
+          }}
+        />
+      )}
+
+      {/* Form Editor Modal */}
+      {editingFormId && (
+        <SupervisorFormEditor
+          formId={editingFormId}
+          isOpen={!!editingFormId}
+          onClose={() => setEditingFormId(null)}
+          onSaved={() => {
+            // Form is auto-saved, just close
+          }}
+        />
+      )}
 
       {/* Create Folder Modal */}
       {showFolderModal && (
