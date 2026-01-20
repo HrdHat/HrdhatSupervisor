@@ -6,13 +6,9 @@ import { useSupervisorStore } from '@/stores/supervisorStore';
 import { useDocumentRealtime } from '@/hooks/useDocumentRealtime';
 import { DocumentFilterBar, filterDocuments } from '@/components/DocumentFilterBar';
 import { QuickReviewModal } from '@/components/QuickReviewModal';
-import { ShiftList } from '@/components/ShiftList';
-import { ShiftDetail } from '@/components/ShiftDetail';
 import { ShiftCloseout } from '@/components/ShiftCloseout';
 import { CreateShiftModal } from '@/components/CreateShiftModal';
 import { DiscoverFromFormsModal } from '@/components/DiscoverFromFormsModal';
-import { DailyLogPanel } from '@/components/DailyLogPanel';
-import { SiteIssuesTracker } from '@/components/SiteIssuesTracker';
 import { ProjectDailyReportModal } from '@/components/ProjectDailyReportModal';
 import { QuickAddBar } from '@/components/QuickAddBar';
 import { DailyLogModal } from '@/components/DailyLogModal';
@@ -119,9 +115,8 @@ export default function ProjectDetail() {
   const [showDiscoverSubcontractorsModal, setShowDiscoverSubcontractorsModal] = useState(false);
 
   // Daily Log & PDR state
-  const [showSiteIssues, setShowSiteIssues] = useState(false);
   const [showPDRModal, setShowPDRModal] = useState(false);
-  const [pdrDate, setPdrDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [pdrDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [selectedPDR, setSelectedPDR] = useState<ProjectDailyReport | null>(null);
 
   const logout = useAuthStore((s) => s.logout);
@@ -167,15 +162,12 @@ export default function ProjectDetail() {
   const shiftWorkers = useSupervisorStore((s) => s.shiftWorkers);
   const fetchShifts = useSupervisorStore((s) => s.fetchShifts);
   const setCurrentShift = useSupervisorStore((s) => s.setCurrentShift);
-  const fetchShiftWorkers = useSupervisorStore((s) => s.fetchShiftWorkers);
-  const deleteShift = useSupervisorStore((s) => s.deleteShift);
 
   // Daily Log & PDR store selectors
   const dailyLogs = useSupervisorStore((s) => s.dailyLogs);
   const fetchDailyLogs = useSupervisorStore((s) => s.fetchDailyLogs);
   const fetchDailyReports = useSupervisorStore((s) => s.fetchDailyReports);
   const deleteDailyLog = useSupervisorStore((s) => s.deleteDailyLog);
-  const getOpenSiteIssues = useSupervisorStore((s) => s.getOpenSiteIssues);
 
   // Supervisor Forms store selectors
   const fetchSupervisorForms = useSupervisorStore((s) => s.fetchSupervisorForms);
@@ -240,17 +232,13 @@ export default function ProjectDetail() {
 
   // Handle URL query parameters for deep linking (e.g., from Dashboard "Start New Shift")
   useEffect(() => {
-    const tab = searchParams.get('tab');
     const newShift = searchParams.get('newShift');
     
-    if (tab === 'shifts') {
-      setActiveTab('shifts');
-      if (newShift === 'true') {
-        // Small delay to ensure data is loaded
-        setTimeout(() => {
-          setShowCreateShiftModal(true);
-        }, 100);
-      }
+    if (newShift === 'true') {
+      // Small delay to ensure data is loaded
+      setTimeout(() => {
+        setShowCreateShiftModal(true);
+      }, 100);
       // Clear the URL params after processing
       setSearchParams({});
     }

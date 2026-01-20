@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useSupervisorStore } from '@/stores/supervisorStore';
 import type { FormTypeId, FormCategory } from '@/types/supervisorForms';
-import { SUPERVISOR_FORM_TYPES, getWorkerFormTypes, getSupervisorFormTypes } from '@/types/supervisorForms';
+import { getWorkerFormTypes, getSupervisorFormTypes } from '@/types/supervisorForms';
 
 interface NewSupervisorFormPickerProps {
   projectId: string;
