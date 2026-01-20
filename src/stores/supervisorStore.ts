@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 import { supabase } from '@/config/supabaseClient';
+import { sanitizeString, sanitizeNullableString, sanitizeObject } from '@/utils/sanitize';
 import type {
   SupervisorFormInstance,
   CreateSupervisorFormInput,
@@ -267,8 +268,8 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
         .from('supervisor_projects')
         .insert({
           supervisor_id: user.id,
-          name: input.name,
-          site_address: input.site_address ?? null,
+          name: sanitizeString(input.name),
+          site_address: sanitizeNullableString(input.site_address),
         })
         .select()
         .single();
@@ -311,8 +312,8 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
         .from('supervisor_projects')
         .insert({
           supervisor_id: user.id,
-          name: input.name,
-          site_address: input.site_address ?? null,
+          name: sanitizeString(input.name),
+          site_address: sanitizeNullableString(input.site_address),
           processing_email: processingEmail,
         })
         .select()
@@ -412,9 +413,9 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
         .from('project_folders')
         .insert({
           project_id: input.project_id,
-          folder_name: input.folder_name,
-          description: input.description ?? null,
-          ai_classification_hint: input.ai_classification_hint ?? null,
+          folder_name: sanitizeString(input.folder_name),
+          description: sanitizeNullableString(input.description),
+          ai_classification_hint: sanitizeNullableString(input.ai_classification_hint),
           color: input.color ?? '#6B7280',
         })
         .select()
@@ -668,11 +669,11 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
         .from('project_subcontractors')
         .insert({
           project_id: input.project_id,
-          company_name: input.company_name,
-          contact_name: input.contact_name ?? null,
-          contact_email: input.contact_email ?? null,
-          contact_phone: input.contact_phone ?? null,
-          notes: input.notes ?? null,
+          company_name: sanitizeString(input.company_name),
+          contact_name: sanitizeNullableString(input.contact_name),
+          contact_email: sanitizeNullableString(input.contact_email),
+          contact_phone: sanitizeNullableString(input.contact_phone),
+          notes: sanitizeNullableString(input.notes),
         })
         .select()
         .single();
@@ -701,11 +702,11 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
     try {
       const updateData: Record<string, unknown> = { updated_at: new Date().toISOString() };
       
-      if (input.company_name !== undefined) updateData.company_name = input.company_name;
-      if (input.contact_name !== undefined) updateData.contact_name = input.contact_name;
-      if (input.contact_email !== undefined) updateData.contact_email = input.contact_email;
-      if (input.contact_phone !== undefined) updateData.contact_phone = input.contact_phone;
-      if (input.notes !== undefined) updateData.notes = input.notes;
+      if (input.company_name !== undefined) updateData.company_name = sanitizeString(input.company_name);
+      if (input.contact_name !== undefined) updateData.contact_name = sanitizeNullableString(input.contact_name);
+      if (input.contact_email !== undefined) updateData.contact_email = sanitizeNullableString(input.contact_email);
+      if (input.contact_phone !== undefined) updateData.contact_phone = sanitizeNullableString(input.contact_phone);
+      if (input.notes !== undefined) updateData.notes = sanitizeNullableString(input.notes);
       if (input.status !== undefined) updateData.status = input.status;
 
       const { error } = await supabase
@@ -1243,11 +1244,11 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
         .from('project_shifts')
         .insert({
           project_id: input.project_id,
-          name: input.name,
+          name: sanitizeString(input.name),
           scheduled_date: input.scheduled_date,
           start_time: input.start_time ?? null,
           end_time: input.end_time ?? null,
-          notes: input.notes ?? null,
+          notes: sanitizeNullableString(input.notes),
           shift_tasks: input.shift_tasks ?? [],
           shift_notes: input.shift_notes ?? [],
           custom_categories: input.custom_categories ?? [],
@@ -1289,18 +1290,18 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
     try {
       const updateData: Record<string, unknown> = {};
 
-      if (input.name !== undefined) updateData.name = input.name;
+      if (input.name !== undefined) updateData.name = sanitizeString(input.name);
       if (input.scheduled_date !== undefined) updateData.scheduled_date = input.scheduled_date;
       if (input.start_time !== undefined) updateData.start_time = input.start_time;
       if (input.end_time !== undefined) updateData.end_time = input.end_time;
       if (input.status !== undefined) updateData.status = input.status;
-      if (input.notes !== undefined) updateData.notes = input.notes;
+      if (input.notes !== undefined) updateData.notes = sanitizeNullableString(input.notes);
       if (input.shift_tasks !== undefined) updateData.shift_tasks = input.shift_tasks;
       if (input.shift_notes !== undefined) updateData.shift_notes = input.shift_notes;
       if (input.custom_categories !== undefined) updateData.custom_categories = input.custom_categories;
       if (input.closeout_checklist !== undefined) updateData.closeout_checklist = input.closeout_checklist;
-      if (input.closeout_notes !== undefined) updateData.closeout_notes = input.closeout_notes;
-      if (input.incomplete_reason !== undefined) updateData.incomplete_reason = input.incomplete_reason;
+      if (input.closeout_notes !== undefined) updateData.closeout_notes = sanitizeNullableString(input.closeout_notes);
+      if (input.incomplete_reason !== undefined) updateData.incomplete_reason = sanitizeNullableString(input.incomplete_reason);
 
       const { error } = await supabase
         .from('project_shifts')
@@ -1422,9 +1423,9 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
           worker_type: input.worker_type,
           user_id: input.user_id ?? null,
           subcontractor_id: input.subcontractor_id ?? null,
-          name: input.name,
-          phone: input.phone ?? null,
-          email: input.email ?? null,
+          name: sanitizeString(input.name),
+          phone: sanitizeNullableString(input.phone),
+          email: sanitizeNullableString(input.email),
           notification_method: input.notification_method ?? 'sms',
         })
         .select()
@@ -1671,8 +1672,8 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
         .update({
           status: 'completed',
           closeout_checklist: input.closeout_checklist,
-          closeout_notes: input.closeout_notes ?? null,
-          incomplete_reason: input.incomplete_reason ?? null,
+          closeout_notes: sanitizeNullableString(input.closeout_notes),
+          incomplete_reason: sanitizeNullableString(input.incomplete_reason),
           closed_at: new Date().toISOString(),
           closed_by: user.id,
         })
@@ -1824,8 +1825,8 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
 
     const newTask: ShiftTask = {
       id: crypto.randomUUID(),
-      category: task.category,
-      content: task.content,
+      category: sanitizeString(task.category),
+      content: sanitizeString(task.content),
       checked: task.checked,
       created_at: new Date().toISOString(),
     };
@@ -1915,8 +1916,8 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
 
     const newNote: ShiftNote = {
       id: crypto.randomUUID(),
-      category: note.category,
-      content: note.content,
+      category: sanitizeString(note.category),
+      content: sanitizeString(note.content),
       created_at: new Date().toISOString(),
     };
 
@@ -2005,7 +2006,7 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
 
     const newCategory: CustomCategory = {
       id: crypto.randomUUID(),
-      name: category.name,
+      name: sanitizeString(category.name),
       color: category.color,
     };
 
@@ -2263,11 +2264,11 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
         .from('supervisor_contacts')
         .insert({
           supervisor_id: user.id,
-          name: input.name,
-          email: input.email ?? null,
-          phone: input.phone ?? null,
-          company_name: input.company_name ?? null,
-          notes: input.notes ?? null,
+          name: sanitizeString(input.name),
+          email: sanitizeNullableString(input.email),
+          phone: sanitizeNullableString(input.phone),
+          company_name: sanitizeNullableString(input.company_name),
+          notes: sanitizeNullableString(input.notes),
           source: input.source ?? 'manual',
           recent_project_id: input.recent_project_id ?? null,
           recent_project_date: input.recent_project_id ? new Date().toISOString() : null,
@@ -2362,8 +2363,8 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
           project_id: input.project_id,
           log_date: logDate,
           log_type: input.log_type,
-          content: input.content,
-          metadata: input.metadata ?? {},
+          content: sanitizeString(input.content),
+          metadata: input.metadata ? sanitizeObject(input.metadata as Record<string, unknown>) : {},
           status: input.status ?? 'active',
           created_by: user.id,
         })
@@ -2392,8 +2393,8 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
     try {
       const updateData: Record<string, unknown> = {};
       
-      if (input.content !== undefined) updateData.content = input.content;
-      if (input.metadata !== undefined) updateData.metadata = input.metadata;
+      if (input.content !== undefined) updateData.content = sanitizeString(input.content);
+      if (input.metadata !== undefined) updateData.metadata = sanitizeObject(input.metadata as Record<string, unknown>);
       if (input.status !== undefined) updateData.status = input.status;
 
       const { error } = await supabase
@@ -2516,8 +2517,8 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
         .insert({
           project_id: input.project_id,
           report_date: input.report_date,
-          weather: input.weather ?? {},
-          summary_notes: input.summary_notes ?? null,
+          weather: input.weather ? sanitizeObject(input.weather as Record<string, unknown>) : {},
+          summary_notes: sanitizeNullableString(input.summary_notes),
           generated_by: user.id,
         })
         .select()
@@ -2545,8 +2546,8 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
     try {
       const updateData: Record<string, unknown> = {};
       
-      if (weather !== undefined) updateData.weather = weather;
-      if (summaryNotes !== undefined) updateData.summary_notes = summaryNotes;
+      if (weather !== undefined) updateData.weather = sanitizeObject(weather as Record<string, unknown>);
+      if (summaryNotes !== undefined) updateData.summary_notes = sanitizeNullableString(summaryNotes);
 
       const { error } = await supabase
         .from('project_daily_reports')
@@ -2703,7 +2704,7 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
 
       // Get form type config for title
       const formTypeConfig = getFormTypeConfig(input.template_id);
-      const title = input.title ?? formTypeConfig?.name ?? input.template_id;
+      const title = sanitizeString(input.title ?? formTypeConfig?.name ?? input.template_id);
 
       // Create empty form data structure
       const emptyFormData = {
@@ -2754,10 +2755,13 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
 
       if (!user) throw new Error('Not authenticated');
 
+      // Sanitize form data before storing
+      const sanitizedFormData = sanitizeObject(formData as Record<string, unknown>);
+
       const { error } = await supabase
         .from('form_instances')
         .update({
-          form_data: formData,
+          form_data: sanitizedFormData,
           updated_by: user.id,
           updated_at: new Date().toISOString(),
         })
