@@ -52,7 +52,7 @@ export function QuickAddBar({ onAddShift, onAddLog }: QuickAddBarProps) {
             `}
           >
             <span className="text-lg">{icon}</span>
-            <span className="text-xs font-medium whitespace-nowrap">+ {label}</span>
+            <span className="text-xs font-medium whitespace-nowrap">{label}</span>
           </button>
         ))}
       </div>

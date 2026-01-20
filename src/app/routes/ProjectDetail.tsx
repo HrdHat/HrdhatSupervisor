@@ -119,6 +119,11 @@ export default function ProjectDetail() {
   const [pdrDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [selectedPDR, setSelectedPDR] = useState<ProjectDailyReport | null>(null);
 
+  // Project overview collapse state (collapsed by default on mobile)
+  const [isOverviewExpanded, setIsOverviewExpanded] = useState(
+    typeof window !== 'undefined' ? window.innerWidth >= 640 : true
+  );
+
   const logout = useAuthStore((s) => s.logout);
   const user = useAuthStore((s) => s.user);
   const setLastActiveProject = useAuthStore((s) => s.setLastActiveProject);
@@ -165,6 +170,7 @@ export default function ProjectDetail() {
 
   // Daily Log & PDR store selectors
   const dailyLogs = useSupervisorStore((s) => s.dailyLogs);
+  const dailyReports = useSupervisorStore((s) => s.dailyReports);
   const fetchDailyLogs = useSupervisorStore((s) => s.fetchDailyLogs);
   const fetchDailyReports = useSupervisorStore((s) => s.fetchDailyReports);
   const deleteDailyLog = useSupervisorStore((s) => s.deleteDailyLog);
@@ -585,19 +591,19 @@ export default function ProjectDetail() {
       <header className="bg-slate-900/80 backdrop-blur-sm border-b border-slate-800 relative z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-4">
-              <Link to="/" className="text-xl font-bold text-white hover:text-[#d1bd23] transition-colors">
+            <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+              <Link to="/" className="hidden sm:block text-xl font-bold text-white hover:text-[#d1bd23] transition-colors">
                 HrdHat Supervisor
               </Link>
-              <span className="text-slate-600">/</span>
-              <Link to="/projects" className="text-slate-400 hover:text-[#d1bd23] transition-colors">
+              <span className="hidden sm:block text-slate-600">/</span>
+              <Link to="/projects" className="text-slate-400 hover:text-[#d1bd23] transition-colors whitespace-nowrap">
                 Projects
               </Link>
-              <span className="text-slate-600">/</span>
-              <span className="text-white font-medium">{project?.name ?? 'Loading...'}</span>
+              <span className="text-slate-600">:</span>
+              <span className="text-white font-medium truncate max-w-[150px] sm:max-w-none">{project?.name ?? 'Loading...'}</span>
             </div>
             <div className="flex items-center gap-4">
-              <span className="text-sm text-slate-400">{user?.email}</span>
+              <span className="hidden sm:block text-sm text-slate-400">{user?.email}</span>
               <button
                 onClick={logout}
                 className="text-sm text-slate-400 hover:text-white transition-colors"
@@ -640,68 +646,98 @@ export default function ProjectDetail() {
           </div>
         )}
 
-        {/* Project Header */}
-        <div className="bg-white rounded-xl p-6 shadow-card mb-6">
-          <div className="flex justify-between items-start">
-            <div>
-              <h2 className="text-2xl font-bold text-secondary-900">{project?.name}</h2>
-              {project?.site_address && <p className="text-secondary-600 mt-1">{project.site_address}</p>}
+        {/* Project Header - Collapsible on mobile */}
+        <div className="bg-white rounded-xl shadow-card mb-6 overflow-hidden">
+          {/* Header row - always visible, clickable to toggle */}
+          <div 
+            className="p-4 sm:p-6 flex justify-between items-start cursor-pointer sm:cursor-default"
+            onClick={() => setIsOverviewExpanded(!isOverviewExpanded)}
+          >
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl sm:text-2xl font-bold text-secondary-900 truncate">{project?.name}</h2>
+                <span
+                  className={`flex-shrink-0 px-2 sm:px-3 py-0.5 sm:py-1 text-xs sm:text-sm font-medium rounded ${
+                    project?.is_active ? 'bg-success-100 text-success-700' : 'bg-secondary-100 text-secondary-600'
+                  }`}
+                >
+                  {project?.is_active ? 'Active' : 'Inactive'}
+                </span>
+              </div>
+              {project?.site_address && (
+                <p className="text-secondary-600 mt-1 text-sm sm:text-base truncate">{project.site_address}</p>
+              )}
             </div>
-            <span
-              className={`px-3 py-1 text-sm font-medium rounded ${
-                project?.is_active ? 'bg-success-100 text-success-700' : 'bg-secondary-100 text-secondary-600'
-              }`}
+            {/* Collapse toggle - visible on mobile */}
+            <button 
+              className="sm:hidden ml-2 p-1 text-secondary-400 hover:text-secondary-600 transition-colors"
+              aria-label={isOverviewExpanded ? 'Collapse details' : 'Expand details'}
             >
-              {project?.is_active ? 'Active' : 'Inactive'}
-            </span>
+              <svg 
+                className={`w-5 h-5 transition-transform duration-200 ${isOverviewExpanded ? 'rotate-180' : ''}`} 
+                fill="none" 
+                viewBox="0 0 24 24" 
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
           </div>
 
-          {/* Project Email - Compact inline version */}
-          {project?.processing_email && (
-            <div className="mt-4 flex items-center gap-3 text-sm">
-              <svg className="w-4 h-4 text-secondary-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-              <span className="text-secondary-500">Send forms to:</span>
-              <code className="font-mono text-primary-600 bg-primary-50 px-2 py-0.5 rounded">
-                {project.processing_email}
-              </code>
-              <button
-                onClick={() => {
-                  if (project.processing_email) {
-                    navigator.clipboard.writeText(project.processing_email);
-                  }
-                }}
-                className="p-1.5 text-secondary-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
-                title="Copy email address"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+          {/* Collapsible content */}
+          <div className={`${isOverviewExpanded ? 'block' : 'hidden'} sm:block`}>
+            {/* Project Email - Compact inline version */}
+            {project?.processing_email && (
+              <div className="px-4 sm:px-6 pb-4 flex flex-wrap items-center gap-2 sm:gap-3 text-sm">
+                <svg className="w-4 h-4 text-secondary-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                 </svg>
-              </button>
-            </div>
-          )}
+                <span className="text-secondary-500">Send forms to:</span>
+                <code className="font-mono text-primary-600 bg-primary-50 px-2 py-0.5 rounded text-xs sm:text-sm break-all">
+                  {project.processing_email}
+                </code>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (project.processing_email) {
+                      navigator.clipboard.writeText(project.processing_email);
+                    }
+                  }}
+                  className="p-1.5 text-secondary-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
+                  title="Copy email address"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                </button>
+              </div>
+            )}
 
-          {/* Stats */}
-          <div className="grid grid-cols-4 gap-4 mt-6 pt-6 border-t border-secondary-200">
-            <div>
-              <div className="text-2xl font-bold text-secondary-900">{folders.length}</div>
-              <div className="text-sm text-secondary-500">Folders</div>
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-secondary-900">{activeSubcontractors.length}</div>
-              <div className="text-sm text-secondary-500">Subcontractors</div>
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-secondary-900">{contacts.length}</div>
-              <div className="text-sm text-secondary-500">Contacts</div>
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-secondary-900">{totalDocumentsCount}</div>
-              <div className="text-sm text-secondary-500">Documents</div>
-              {unsortedCount > 0 && (
-                <div className="text-xs text-warning-600 mt-1">{unsortedCount} need review</div>
-              )}
+            {/* Stats - 2 cols on mobile, 5 cols on desktop */}
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4 px-4 sm:px-6 pb-4 sm:pb-6 pt-4 border-t border-secondary-200">
+              <div className="text-center sm:text-left">
+                <div className="text-xl sm:text-2xl font-bold text-secondary-900">{folders.length}</div>
+                <div className="text-xs sm:text-sm text-secondary-500">Folders</div>
+              </div>
+              <div className="text-center sm:text-left">
+                <div className="text-xl sm:text-2xl font-bold text-secondary-900">{activeSubcontractors.length}</div>
+                <div className="text-xs sm:text-sm text-secondary-500">Subcontractors</div>
+              </div>
+              <div className="text-center sm:text-left">
+                <div className="text-xl sm:text-2xl font-bold text-secondary-900">{contacts.length}</div>
+                <div className="text-xs sm:text-sm text-secondary-500">Contacts</div>
+              </div>
+              <div className="text-center sm:text-left">
+                <div className="text-xl sm:text-2xl font-bold text-secondary-900">{totalDocumentsCount}</div>
+                <div className="text-xs sm:text-sm text-secondary-500">Documents</div>
+                {unsortedCount > 0 && (
+                  <div className="text-xs text-warning-600 mt-1">{unsortedCount} need review</div>
+                )}
+              </div>
+              <div className="text-center sm:text-left col-span-2 sm:col-span-1">
+                <div className="text-xl sm:text-2xl font-bold text-secondary-900">{dailyReports.length}</div>
+                <div className="text-xs sm:text-sm text-secondary-500">Daily Reports</div>
+              </div>
             </div>
           </div>
         </div>
