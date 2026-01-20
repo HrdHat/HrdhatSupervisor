@@ -10,11 +10,15 @@ interface DailyLogListProps {
   onDeleteLog?: (logId: string) => void;
   /** Show only specific log types, or all if undefined */
   filterTypes?: DailyLogType[];
+  /** If provided, enables external collapse control */
+  isExpanded?: boolean;
+  onToggleExpand?: () => void;
 }
 
-export function DailyLogList({ logs, onLogClick, onDeleteLog, filterTypes }: DailyLogListProps) {
+export function DailyLogList({ logs, onLogClick, onDeleteLog, filterTypes, isExpanded = true, onToggleExpand }: DailyLogListProps) {
   const [sortMode, setSortMode] = useState<SortMode>('time_desc');
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
+  const isCollapsible = onToggleExpand !== undefined;
 
   // Filter and sort logs
   const processedLogs = useMemo(() => {
@@ -275,81 +279,124 @@ export function DailyLogList({ logs, onLogClick, onDeleteLog, filterTypes }: Dai
 
   if (logs.length === 0) {
     return (
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <div className="text-center text-gray-500">
-          <span className="text-3xl mb-2 block">📋</span>
-          <p className="text-sm">No log entries yet today</p>
-          <p className="text-xs text-gray-400 mt-1">Use Quick Add above to create your first entry</p>
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        {/* Header with collapse toggle */}
+        <div 
+          className={`flex items-center gap-2 p-4 ${isCollapsible ? 'cursor-pointer' : ''}`}
+          onClick={isCollapsible ? onToggleExpand : undefined}
+        >
+          {isCollapsible && (
+            <svg 
+              className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} 
+              fill="none" 
+              viewBox="0 0 24 24" 
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          )}
+          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+            Today's Logs
+          </span>
+          <span className="text-xs text-gray-400">(0)</span>
         </div>
+        {isExpanded && (
+          <div className="px-6 pb-6 text-center text-gray-500">
+            <span className="text-3xl mb-2 block">📋</span>
+            <p className="text-sm">No log entries yet today</p>
+            <p className="text-xs text-gray-400 mt-1">Use Quick Add above to create your first entry</p>
+          </div>
+        )}
       </div>
     );
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-      {/* Header with sort controls */}
-      <div className="flex items-center justify-between mb-4">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      {/* Header with collapse toggle and sort controls */}
+      <div 
+        className={`flex items-center justify-between p-4 ${isCollapsible ? 'cursor-pointer' : ''} ${!isExpanded ? 'pb-4' : ''}`}
+        onClick={isCollapsible ? onToggleExpand : undefined}
+      >
         <div className="flex items-center gap-2">
+          {/* Collapse toggle icon */}
+          {isCollapsible && (
+            <svg 
+              className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} 
+              fill="none" 
+              viewBox="0 0 24 24" 
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          )}
           <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
             Today's Logs
           </span>
           <span className="text-xs text-gray-400">({processedLogs.length})</span>
         </div>
         
-        {/* Sort Toggle */}
-        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
-          <button
-            onClick={() => setSortMode('time_desc')}
-            className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
-              sortMode === 'time_desc' 
-                ? 'bg-white text-gray-800 shadow-sm' 
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-            title="Sort by newest first"
+        {/* Sort Toggle - only show when expanded */}
+        {isExpanded && (
+          <div 
+            className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5"
+            onClick={(e) => e.stopPropagation()}
           >
-            ↓ Newest
-          </button>
-          <button
-            onClick={() => setSortMode('time_asc')}
-            className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
-              sortMode === 'time_asc' 
-                ? 'bg-white text-gray-800 shadow-sm' 
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-            title="Sort by oldest first"
-          >
-            ↑ Oldest
-          </button>
-          <button
-            onClick={() => setSortMode('category')}
-            className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
-              sortMode === 'category' 
-                ? 'bg-white text-gray-800 shadow-sm' 
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-            title="Group by category"
-          >
-            📁 Category
-          </button>
-        </div>
-      </div>
-      
-      {/* Log List */}
-      <div className="max-h-[400px] overflow-y-auto pr-1">
-        {sortMode === 'category' && groupedLogs ? (
-          // Grouped by category
-          <div>
-            {(Object.keys(groupedLogs) as DailyLogType[]).map(logType => 
-              renderCategoryGroup(logType, groupedLogs[logType])
-            )}
-          </div>
-        ) : (
-          // Sorted by time
-          <div className="space-y-2">
-            {processedLogs.map(renderLogCard)}
+            <button
+              onClick={() => setSortMode('time_desc')}
+              className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
+                sortMode === 'time_desc' 
+                  ? 'bg-white text-gray-800 shadow-sm' 
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+              title="Sort by newest first"
+            >
+              ↓ Newest
+            </button>
+            <button
+              onClick={() => setSortMode('time_asc')}
+              className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
+                sortMode === 'time_asc' 
+                  ? 'bg-white text-gray-800 shadow-sm' 
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+              title="Sort by oldest first"
+            >
+              ↑ Oldest
+            </button>
+            <button
+              onClick={() => setSortMode('category')}
+              className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
+                sortMode === 'category' 
+                  ? 'bg-white text-gray-800 shadow-sm' 
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+              title="Group by category"
+            >
+              📁 Category
+            </button>
           </div>
         )}
       </div>
+      
+      {/* Log List - collapsible content */}
+      {isExpanded && (
+        <div className="max-h-[400px] overflow-y-auto pr-1 px-4 pb-4">
+          {sortMode === 'category' && groupedLogs ? (
+            // Grouped by category
+            <div>
+              {(Object.keys(groupedLogs) as DailyLogType[]).map(logType => 
+                renderCategoryGroup(logType, groupedLogs[logType])
+              )}
+            </div>
+          ) : (
+            // Sorted by time
+            <div className="space-y-2">
+              {processedLogs.map(renderLogCard)}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

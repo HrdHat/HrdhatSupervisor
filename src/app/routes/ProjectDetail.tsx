@@ -126,6 +126,10 @@ export default function ProjectDetail() {
 
   // Quick Add collapse state (expanded by default)
   const [isQuickAddExpanded, setIsQuickAddExpanded] = useState(true);
+  
+  // Daily Logs and Forms collapse states (expanded by default)
+  const [isDailyLogsExpanded, setIsDailyLogsExpanded] = useState(true);
+  const [isFormsExpanded, setIsFormsExpanded] = useState(true);
 
   const logout = useAuthStore((s) => s.logout);
   const user = useAuthStore((s) => s.user);
@@ -772,7 +776,7 @@ export default function ProjectDetail() {
           </div>
         </div>
 
-        {/* Daily Logs List - Sortable by time or category */}
+        {/* Daily Logs List - Collapsible, Sortable by time or category */}
         <div className="mt-4">
           <DailyLogList 
             logs={dailyLogs}
@@ -783,17 +787,35 @@ export default function ProjectDetail() {
                 fetchDailyLogs(projectId);
               }
             }}
+            isExpanded={isDailyLogsExpanded}
+            onToggleExpand={() => setIsDailyLogsExpanded(!isDailyLogsExpanded)}
           />
         </div>
 
-        {/* Main Content Tabs */}
-        <div className="bg-white rounded-xl shadow-card mt-6">
+        {/* Main Content Tabs - Collapsible */}
+        <div className="bg-white rounded-xl shadow-card mt-6 overflow-hidden">
           <div className="border-b border-secondary-200">
             <nav className="flex -mb-px">
+              {/* Collapse toggle */}
+              <button
+                onClick={() => setIsFormsExpanded(!isFormsExpanded)}
+                className="px-3 py-4 text-secondary-400 hover:text-secondary-600 transition-colors"
+                aria-label={isFormsExpanded ? 'Collapse forms section' : 'Expand forms section'}
+              >
+                <svg 
+                  className={`w-5 h-5 transition-transform duration-200 ${isFormsExpanded ? 'rotate-180' : ''}`} 
+                  fill="none" 
+                  viewBox="0 0 24 24" 
+                  stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              
               {/* Primary tab: Forms (received + created) */}
               <button
                 onClick={() => setActiveTab('documents')}
-                className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
+                className={`px-4 sm:px-6 py-4 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
                   activeTab === 'documents'
                     ? 'border-primary-500 text-primary-600'
                     : 'border-transparent text-secondary-500 hover:text-secondary-700'
@@ -877,6 +899,8 @@ export default function ProjectDetail() {
             </nav>
           </div>
 
+          {/* Collapsible content */}
+          {isFormsExpanded && (
           <div className="p-6">
             {/* Folders Tab */}
             {activeTab === 'folders' && (
@@ -1715,6 +1739,7 @@ export default function ProjectDetail() {
               </div>
             )}
           </div>
+          )}
         </div>
       </main>
 
