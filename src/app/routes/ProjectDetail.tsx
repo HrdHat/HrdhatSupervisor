@@ -15,7 +15,8 @@ import { DailyLogPanel } from '@/components/DailyLogPanel';
 import { SiteIssuesTracker } from '@/components/SiteIssuesTracker';
 import { ProjectDailyReportModal } from '@/components/ProjectDailyReportModal';
 import { QuickAddBar } from '@/components/QuickAddBar';
-import type { ReceivedDocument, DocumentFilters, DocumentMetadata, ProjectSubcontractor, CreateSubcontractorInput, ProjectShiftWithStats, ProjectDailyReport } from '@/types/supervisor';
+import { DailyLogModal } from '@/components/DailyLogModal';
+import type { ReceivedDocument, DocumentFilters, DocumentMetadata, ProjectSubcontractor, CreateSubcontractorInput, ProjectShiftWithStats, ProjectDailyReport, DailyLogType } from '@/types/supervisor';
 import { getEffectiveMetadata } from '@/types/supervisor';
 
 // Toast notification for new documents
@@ -36,8 +37,9 @@ export default function ProjectDetail() {
   // Legacy tab state (for backwards compatibility during refactor)
   const [activeTab, setActiveTab] = useState<'folders' | 'contacts' | 'subcontractors' | 'documents' | 'shifts'>('shifts');
   
-  // Daily log type state (for QuickAddBar)
-  const [_activeLogType, setActiveLogType] = useState<'visitor' | 'delivery' | 'manpower' | 'site_issue' | 'schedule_delay' | null>(null);
+  // Daily log modal state (for QuickAddBar)
+  const [showDailyLogModal, setShowDailyLogModal] = useState(false);
+  const [selectedLogType, setSelectedLogType] = useState<DailyLogType | null>(null);
   
   // Shift management state
   const [showCreateShiftModal, setShowCreateShiftModal] = useState(false);
@@ -705,8 +707,8 @@ export default function ProjectDetail() {
         <QuickAddBar 
           onAddShift={() => setShowCreateShiftModal(true)}
           onAddLog={(type) => {
-            setActiveLogType(type);
-            setActiveTab('shifts'); // Switch to shifts tab to show log panel
+            setSelectedLogType(type);
+            setShowDailyLogModal(true);
           }}
         />
 
@@ -2421,6 +2423,23 @@ export default function ProjectDetail() {
               setSelectedShift(newShift);
               setCurrentShift(newShift);
             }
+          }}
+        />
+      )}
+
+      {/* Daily Log Modal */}
+      {projectId && selectedLogType && (
+        <DailyLogModal
+          projectId={projectId}
+          logType={selectedLogType}
+          isOpen={showDailyLogModal}
+          onClose={() => {
+            setShowDailyLogModal(false);
+            setSelectedLogType(null);
+          }}
+          onLogAdded={() => {
+            // Refresh daily logs
+            fetchDailyLogs(projectId);
           }}
         />
       )}

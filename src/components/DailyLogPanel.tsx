@@ -8,6 +8,7 @@ import type {
   ManpowerMetadata,
   SiteIssueMetadata,
   ScheduleDelayMetadata,
+  ObservationMetadata,
   SiteIssueStatus,
 } from '@/types/supervisor';
 import {
@@ -139,6 +140,25 @@ function LogEntryCard({ log, onDelete, onToggleStatus }: LogEntryCardProps) {
           </div>
         );
       }
+      case 'observation': {
+        const meta = log.metadata as ObservationMetadata;
+        return (
+          <div className="text-xs text-gray-500 mt-1 space-y-0.5">
+            {meta.location && <p><span className="font-medium">Location:</span> {meta.location}</p>}
+            {meta.area && <p><span className="font-medium">Area:</span> {meta.area}</p>}
+            {meta.photo_url && (
+              <div className="mt-2">
+                <img 
+                  src={meta.photo_url} 
+                  alt="Observation" 
+                  className="w-full max-w-xs h-32 object-cover rounded-lg cursor-pointer hover:opacity-90"
+                  onClick={() => window.open(meta.photo_url, '_blank')}
+                />
+              </div>
+            )}
+          </div>
+        );
+      }
       default:
         return null;
     }
@@ -222,6 +242,7 @@ function QuickAddForm({ logType, projectId, selectedDate, onAdded }: QuickAddFor
   const [manpowerMeta, setManpowerMeta] = useState<ManpowerMetadata>({ company: '', trade: '', count: 0, hours: 8 });
   const [issueMeta, setIssueMeta] = useState<SiteIssueMetadata>({ priority: 'medium' });
   const [scheduleMeta, setScheduleMeta] = useState<ScheduleDelayMetadata>({ delay_type: 'other' });
+  const [observationMeta, setObservationMeta] = useState<ObservationMetadata>({ location: '', area: '' });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -246,6 +267,9 @@ function QuickAddForm({ logType, projectId, selectedDate, onAdded }: QuickAddFor
       case 'schedule_delay':
         metadata = { ...scheduleMeta };
         break;
+      case 'observation':
+        metadata = { ...observationMeta };
+        break;
     }
 
     await addDailyLog({
@@ -264,6 +288,7 @@ function QuickAddForm({ logType, projectId, selectedDate, onAdded }: QuickAddFor
     setManpowerMeta({ company: '', trade: '', count: 0, hours: 8 });
     setIssueMeta({ priority: 'medium' });
     setScheduleMeta({ delay_type: 'other' });
+    setObservationMeta({ location: '', area: '' });
     setIsSubmitting(false);
     onAdded();
   };
@@ -493,6 +518,34 @@ function QuickAddForm({ logType, projectId, selectedDate, onAdded }: QuickAddFor
         </div>
       )}
 
+      {logType === 'observation' && (
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Location</label>
+            <input
+              type="text"
+              value={observationMeta.location ?? ''}
+              onChange={(e) => setObservationMeta({ ...observationMeta, location: e.target.value })}
+              className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+              placeholder="Building A, Floor 2"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Area/Zone</label>
+            <input
+              type="text"
+              value={observationMeta.area ?? ''}
+              onChange={(e) => setObservationMeta({ ...observationMeta, area: e.target.value })}
+              className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+              placeholder="North Wing, Kitchen"
+            />
+          </div>
+          <div className="col-span-2 text-xs text-gray-500">
+            For photo attachments, use the Quick Add bar above to open the full form.
+          </div>
+        </div>
+      )}
+
       {/* Submit button */}
       <button
         type="submit"
@@ -544,6 +597,7 @@ export function DailyLogPanel({ projectId, selectedDate, onOpenSiteIssues, compa
     { type: 'site_issue', label: 'Site Issues' },
     { type: 'manpower', label: 'Manpower' },
     { type: 'schedule_delay', label: 'Schedule' },
+    { type: 'observation', label: 'Observations' },
   ];
 
   const handleDelete = async (logId: string) => {

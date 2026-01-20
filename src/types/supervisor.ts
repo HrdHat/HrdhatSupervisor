@@ -520,7 +520,7 @@ export interface CreateContactInput {
 /**
  * Type of daily log entry
  */
-export type DailyLogType = 'visitor' | 'delivery' | 'site_issue' | 'manpower' | 'schedule_delay';
+export type DailyLogType = 'visitor' | 'delivery' | 'site_issue' | 'manpower' | 'schedule_delay' | 'observation';
 
 /**
  * Status for site issue logs
@@ -579,6 +579,16 @@ export interface ScheduleDelayMetadata {
 }
 
 /**
+ * Metadata for observation log entries
+ */
+export interface ObservationMetadata {
+  location?: string;
+  area?: string;
+  photo_url?: string;
+  photo_storage_path?: string;
+}
+
+/**
  * Union type for all metadata types
  */
 export type DailyLogMetadata = 
@@ -587,6 +597,7 @@ export type DailyLogMetadata =
   | ManpowerMetadata 
   | SiteIssueMetadata 
   | ScheduleDelayMetadata 
+  | ObservationMetadata
   | Record<string, unknown>;
 
 /**
@@ -686,6 +697,7 @@ export const DAILY_LOG_TYPE_CONFIG: Record<DailyLogType, { label: string; icon: 
   site_issue: { label: 'Site Issue', icon: '⚠️', color: 'text-red-700', bgColor: 'bg-red-100' },
   manpower: { label: 'Manpower', icon: '👷', color: 'text-purple-700', bgColor: 'bg-purple-100' },
   schedule_delay: { label: 'Schedule/Delay', icon: '📅', color: 'text-orange-700', bgColor: 'bg-orange-100' },
+  observation: { label: 'Observation', icon: '👁️', color: 'text-teal-700', bgColor: 'bg-teal-100' },
 };
 
 /**
