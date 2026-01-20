@@ -1052,10 +1052,75 @@ function DailyReportForm({ formData, updateField }: FormEditorProps) {
         </div>
       </section>
 
+      {/* Visitors Summary */}
+      <section>
+        <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+          <span className="w-6 h-6 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center text-xs">6</span>
+          Visitors ({getFieldValue(formData, 'visitors_summary', 'total_count', 0) as number})
+        </h3>
+        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+          {(() => {
+            // #region agent log
+            const rawVisitorsSummary = (formData.modules as Record<string, unknown>)?.visitors_summary;
+            fetch('http://127.0.0.1:7242/ingest/0fb85a1d-a3b1-4c77-bfeb-610e3c7231e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SupervisorFormEditor.tsx:visitors_section',message:'H5-Frontend: Raw visitors_summary module',data:{rawVisitorsSummary, fullModules: Object.keys((formData.modules as Record<string, unknown>) || {})},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5'})}).catch(()=>{});
+            // #endregion
+            
+            const visitors = (getFieldValue(formData, 'visitors_summary', 'visitors', []) as Array<{
+              name: string;
+              company: string | null;
+              time_in: string | null;
+              time_out: string | null;
+              purpose: string;
+            }>) || [];
+            
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/0fb85a1d-a3b1-4c77-bfeb-610e3c7231e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SupervisorFormEditor.tsx:visitors_after_parse',message:'H5-Frontend: Parsed visitors array',data:{visitorsLength: visitors.length, visitors},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5'})}).catch(()=>{});
+            // #endregion
+            
+            if (visitors.length === 0) {
+              return (
+                <p className="text-sm text-gray-500 text-center py-4">No visitors logged for this day</p>
+              );
+            }
+            
+            return (
+              <div className="space-y-3">
+                {visitors.map((visitor, index) => (
+                  <div key={index} className="bg-white rounded-lg p-3 border border-purple-100">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-800">{visitor.name}</p>
+                        {visitor.company && (
+                          <p className="text-xs text-gray-500">{visitor.company}</p>
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-500 text-right">
+                        {visitor.time_in && (
+                          <span>In: {visitor.time_in}</span>
+                        )}
+                        {visitor.time_in && visitor.time_out && <span className="mx-1">•</span>}
+                        {visitor.time_out && (
+                          <span>Out: {visitor.time_out}</span>
+                        )}
+                      </div>
+                    </div>
+                    {visitor.purpose && (
+                      <p className="text-sm text-gray-600 mt-2 border-t border-purple-100 pt-2">
+                        {visitor.purpose}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+        </div>
+      </section>
+
       {/* Issues Summary */}
       <section>
         <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-          <span className="w-6 h-6 rounded-full bg-orange-100 text-orange-700 flex items-center justify-center text-xs">6</span>
+          <span className="w-6 h-6 rounded-full bg-orange-100 text-orange-700 flex items-center justify-center text-xs">7</span>
           Issues & Delays
         </h3>
         <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 space-y-3">
@@ -1086,7 +1151,7 @@ function DailyReportForm({ formData, updateField }: FormEditorProps) {
       {/* Forms Summary */}
       <section>
         <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-          <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs">7</span>
+          <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs">8</span>
           Forms Submitted
         </h3>
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
@@ -1123,7 +1188,7 @@ function DailyReportForm({ formData, updateField }: FormEditorProps) {
       {/* Supervisor Notes */}
       <section>
         <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-          <span className="w-6 h-6 rounded-full bg-gray-100 text-gray-700 flex items-center justify-center text-xs">8</span>
+          <span className="w-6 h-6 rounded-full bg-gray-100 text-gray-700 flex items-center justify-center text-xs">9</span>
           Supervisor Notes
         </h3>
         <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
