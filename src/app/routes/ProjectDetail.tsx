@@ -653,13 +653,22 @@ export default function ProjectDetail() {
           </div>
         )}
 
-        {/* Project Header - Collapsible on mobile */}
+        {/* Project Header - Collapsible */}
         <div className="bg-white rounded-xl shadow-card mb-6 overflow-hidden">
           {/* Header row - always visible, clickable to toggle */}
           <div 
-            className="p-4 sm:p-6 flex justify-between items-start cursor-pointer sm:cursor-default"
+            className="p-4 sm:p-6 flex items-start gap-3 cursor-pointer"
             onClick={() => setIsOverviewExpanded(!isOverviewExpanded)}
           >
+            {/* Collapse toggle - visible on all screen sizes */}
+            <svg 
+              className={`w-5 h-5 text-secondary-400 transition-transform duration-200 flex-shrink-0 mt-1 ${isOverviewExpanded ? 'rotate-180' : ''}`} 
+              fill="none" 
+              viewBox="0 0 24 24" 
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 <h2 className="text-xl sm:text-2xl font-bold text-secondary-900 truncate">{project?.name}</h2>
@@ -675,24 +684,10 @@ export default function ProjectDetail() {
                 <p className="text-secondary-600 mt-1 text-sm sm:text-base truncate">{project.site_address}</p>
               )}
             </div>
-            {/* Collapse toggle - visible on mobile */}
-            <button 
-              className="sm:hidden ml-2 p-1 text-secondary-400 hover:text-secondary-600 transition-colors"
-              aria-label={isOverviewExpanded ? 'Collapse details' : 'Expand details'}
-            >
-              <svg 
-                className={`w-5 h-5 transition-transform duration-200 ${isOverviewExpanded ? 'rotate-180' : ''}`} 
-                fill="none" 
-                viewBox="0 0 24 24" 
-                stroke="currentColor"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
           </div>
 
           {/* Collapsible content */}
-          <div className={`${isOverviewExpanded ? 'block' : 'hidden'} sm:block`}>
+          <div className={`${isOverviewExpanded ? 'block' : 'hidden'}`}>
             {/* Project Email - Compact inline version */}
             {project?.processing_email && (
               <div className="px-4 sm:px-6 pb-4 flex flex-wrap items-center gap-2 sm:gap-3 text-sm">
@@ -752,10 +747,9 @@ export default function ProjectDetail() {
         {/* Quick Add Bar - Collapsible */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <div 
-            className="flex items-center justify-between p-4 cursor-pointer"
+            className="flex items-center gap-2 p-4 cursor-pointer"
             onClick={() => setIsQuickAddExpanded(!isQuickAddExpanded)}
           >
-            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Quick Add</span>
             <svg 
               className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${isQuickAddExpanded ? 'rotate-180' : ''}`} 
               fill="none" 
@@ -764,6 +758,7 @@ export default function ProjectDetail() {
             >
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
+            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Quick Add</span>
           </div>
           <div className={`${isQuickAddExpanded ? 'block' : 'hidden'} px-4 pb-4`}>
             <QuickAddBar 
