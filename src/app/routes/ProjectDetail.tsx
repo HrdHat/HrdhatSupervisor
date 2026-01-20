@@ -124,6 +124,11 @@ export default function ProjectDetail() {
     typeof window !== 'undefined' ? window.innerWidth >= 640 : true
   );
 
+  // Quick Add and Daily Logs collapse states (expanded by default)
+  const [isQuickAddExpanded, setIsQuickAddExpanded] = useState(true);
+  const [isDailyLogsExpanded, setIsDailyLogsExpanded] = useState(true);
+  const [isFormsExpanded, setIsFormsExpanded] = useState(true);
+
   const logout = useAuthStore((s) => s.logout);
   const user = useAuthStore((s) => s.user);
   const setLastActiveProject = useAuthStore((s) => s.setLastActiveProject);
@@ -742,14 +747,32 @@ export default function ProjectDetail() {
           </div>
         </div>
 
-        {/* Quick Add Bar - All log types with equal weight */}
-        <QuickAddBar 
-          onAddShift={() => setShowCreateShiftModal(true)}
-          onAddLog={(type) => {
-            setSelectedLogType(type);
-            setShowDailyLogModal(true);
-          }}
-        />
+        {/* Quick Add Bar - Collapsible */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div 
+            className="flex items-center justify-between p-4 cursor-pointer"
+            onClick={() => setIsQuickAddExpanded(!isQuickAddExpanded)}
+          >
+            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Quick Add</span>
+            <svg 
+              className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${isQuickAddExpanded ? 'rotate-180' : ''}`} 
+              fill="none" 
+              viewBox="0 0 24 24" 
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
+          <div className={`${isQuickAddExpanded ? 'block' : 'hidden'} px-4 pb-4`}>
+            <QuickAddBar 
+              onAddShift={() => setShowCreateShiftModal(true)}
+              onAddLog={(type) => {
+                setSelectedLogType(type);
+                setShowDailyLogModal(true);
+              }}
+            />
+          </div>
+        </div>
 
         {/* Daily Logs List - Sortable by time or category */}
         <div className="mt-4">

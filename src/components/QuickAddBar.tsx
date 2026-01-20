@@ -4,6 +4,8 @@ import type { DailyLogType } from '@/types/supervisor';
 interface QuickAddBarProps {
   onAddShift: () => void;
   onAddLog: (type: DailyLogType) => void;
+  /** If true, renders only the button grid without container/header */
+  bare?: boolean;
 }
 
 // Log types configuration with consistent styling
