@@ -124,10 +124,8 @@ export default function ProjectDetail() {
     typeof window !== 'undefined' ? window.innerWidth >= 640 : true
   );
 
-  // Quick Add and Daily Logs collapse states (expanded by default)
+  // Quick Add collapse state (expanded by default)
   const [isQuickAddExpanded, setIsQuickAddExpanded] = useState(true);
-  const [isDailyLogsExpanded, setIsDailyLogsExpanded] = useState(true);
-  const [isFormsExpanded, setIsFormsExpanded] = useState(true);
 
   const logout = useAuthStore((s) => s.logout);
   const user = useAuthStore((s) => s.user);
