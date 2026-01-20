@@ -16,6 +16,7 @@ import { SiteIssuesTracker } from '@/components/SiteIssuesTracker';
 import { ProjectDailyReportModal } from '@/components/ProjectDailyReportModal';
 import { QuickAddBar } from '@/components/QuickAddBar';
 import { DailyLogModal } from '@/components/DailyLogModal';
+import { DailyLogList } from '@/components/DailyLogList';
 import type { ReceivedDocument, DocumentFilters, DocumentMetadata, ProjectSubcontractor, CreateSubcontractorInput, ProjectShiftWithStats, ProjectDailyReport, DailyLogType } from '@/types/supervisor';
 import { getEffectiveMetadata } from '@/types/supervisor';
 
@@ -162,8 +163,10 @@ export default function ProjectDetail() {
   const deleteShift = useSupervisorStore((s) => s.deleteShift);
 
   // Daily Log & PDR store selectors
+  const dailyLogs = useSupervisorStore((s) => s.dailyLogs);
   const fetchDailyLogs = useSupervisorStore((s) => s.fetchDailyLogs);
   const fetchDailyReports = useSupervisorStore((s) => s.fetchDailyReports);
+  const deleteDailyLog = useSupervisorStore((s) => s.deleteDailyLog);
   const getOpenSiteIssues = useSupervisorStore((s) => s.getOpenSiteIssues);
 
   const project = projects.find((p) => p.id === projectId);
@@ -711,6 +714,20 @@ export default function ProjectDetail() {
             setShowDailyLogModal(true);
           }}
         />
+
+        {/* Daily Logs List - Sortable by time or category */}
+        <div className="mt-4">
+          <DailyLogList 
+            logs={dailyLogs}
+            onDeleteLog={async (logId) => {
+              await deleteDailyLog(logId);
+              // Refresh logs after deletion
+              if (projectId) {
+                fetchDailyLogs(projectId);
+              }
+            }}
+          />
+        </div>
 
         {/* Main Content Tabs - Reordered for logging focus */}
         <div className="bg-white rounded-xl shadow-card mt-6">
