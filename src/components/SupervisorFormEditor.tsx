@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { useSupervisorStore } from '@/stores/supervisorStore';
 import type { SupervisorFormInstance } from '@/types/supervisorForms';
 import { getFormTypeConfig } from '@/types/supervisorForms';
+import { SignatureModule, type SignatureEntry } from '@/components/form/SignatureModule';
+import { RobustPhotoUpload } from '@/components/form/RobustPhotoUpload';
 
 interface SupervisorFormEditorProps {
   formId: string;
@@ -49,6 +51,23 @@ export function SupervisorFormEditor({
         },
       },
     }));
+    setHasChanges(true);
+  }, []);
+
+  // Module-level update for signatures/photos (stores data directly, not wrapped in {value:})
+  const updateModule = useCallback((moduleName: string, data: unknown | ((prev: unknown) => unknown)) => {
+    setFormData((prev) => {
+      const modules = prev.modules as Record<string, unknown> || {};
+      const currentModuleData = modules[moduleName];
+      const newData = typeof data === 'function' ? (data as (prev: unknown) => unknown)(currentModuleData) : data;
+      return {
+        ...prev,
+        modules: {
+          ...modules,
+          [moduleName]: newData,
+        },
+      };
+    });
     setHasChanges(true);
   }, []);
 
@@ -134,16 +153,16 @@ export function SupervisorFormEditor({
           {/* Form Content */}
           <div className="flex-1 overflow-y-auto p-6">
             {form.template_id === 'toolbox_talk' && (
-              <ToolboxTalkForm formData={formData} updateField={updateField} />
+              <ToolboxTalkForm formData={formData} updateField={updateField} updateModule={updateModule} formId={form.id} />
             )}
             {form.template_id === 'weekly_inspection' && (
-              <WeeklyInspectionForm formData={formData} updateField={updateField} />
+              <WeeklyInspectionForm formData={formData} updateField={updateField} updateModule={updateModule} formId={form.id} />
             )}
             {form.template_id === 'worker_orientation' && (
-              <WorkerOrientationForm formData={formData} updateField={updateField} />
+              <WorkerOrientationForm formData={formData} updateField={updateField} updateModule={updateModule} formId={form.id} />
             )}
             {!['toolbox_talk', 'weekly_inspection', 'worker_orientation'].includes(form.template_id) && (
-              <GenericFormEditor formData={formData} updateField={updateField} templateId={form.template_id} />
+              <GenericFormEditor formData={formData} updateField={updateField} updateModule={updateModule} formId={form.id} templateId={form.template_id} />
             )}
           </div>
 
@@ -194,6 +213,8 @@ export function SupervisorFormEditor({
 interface FormEditorProps {
   formData: Record<string, unknown>;
   updateField: (moduleName: string, fieldName: string, value: unknown) => void;
+  updateModule: (moduleName: string, data: unknown | ((prev: unknown) => unknown)) => void;
+  formId: string;
 }
 
 function getFieldValue(formData: Record<string, unknown>, moduleName: string, fieldName: string, defaultValue: unknown = ''): unknown {
@@ -204,7 +225,12 @@ function getFieldValue(formData: Record<string, unknown>, moduleName: string, fi
 }
 
 // Toolbox Talk Form
-function ToolboxTalkForm({ formData, updateField }: FormEditorProps) {
+function ToolboxTalkForm({ formData, updateField, updateModule, formId }: FormEditorProps) {
+  // Get module data for signatures and photos
+  const modules = formData.modules as Record<string, unknown> || {};
+  const signaturesData = (modules.signatures || []) as SignatureEntry[];
+  const photosData = (modules.photos || { photos: [] }) as { photos: Array<{ id: string; storage_url: string; caption: string; uploaded_at?: string }> };
+
   return (
     <div className="space-y-6">
       {/* Meeting Details */}
@@ -318,12 +344,38 @@ function ToolboxTalkForm({ formData, updateField }: FormEditorProps) {
           className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
         />
       </section>
+
+      {/* Photos */}
+      <section>
+        <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+          <span className="w-6 h-6 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center text-xs">5</span>
+          Photos
+        </h3>
+        <RobustPhotoUpload
+          formId={formId}
+          moduleData={photosData}
+          onChange={(data) => updateModule('photos', data)}
+        />
+      </section>
+
+      {/* Signatures */}
+      <section>
+        <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+          <span className="w-6 h-6 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center text-xs">6</span>
+          Signatures
+        </h3>
+        <SignatureModule
+          moduleData={signaturesData}
+          onChange={(data) => updateModule('signatures', data)}
+          formId={formId}
+        />
+      </section>
     </div>
   );
 }
 
 // Weekly Inspection Form
-function WeeklyInspectionForm({ formData, updateField }: FormEditorProps) {
+function WeeklyInspectionForm({ formData, updateField, updateModule, formId }: FormEditorProps) {
   const checklistItems = [
     { id: 'ppe', label: 'PPE being worn correctly' },
     { id: 'housekeeping', label: 'Work areas clean and organized' },
@@ -334,6 +386,11 @@ function WeeklyInspectionForm({ formData, updateField }: FormEditorProps) {
     { id: 'scaffolding', label: 'Scaffolding/ladders inspected' },
     { id: 'tools', label: 'Tools in good working condition' },
   ];
+
+  // Get module data for signatures and photos
+  const modules = formData.modules as Record<string, unknown> || {};
+  const signaturesData = (modules.signatures || []) as SignatureEntry[];
+  const photosData = (modules.photos || { photos: [] }) as { photos: Array<{ id: string; storage_url: string; caption: string; uploaded_at?: string }> };
 
   return (
     <div className="space-y-6">
@@ -457,12 +514,42 @@ function WeeklyInspectionForm({ formData, updateField }: FormEditorProps) {
           <option value="unsatisfactory">Unsatisfactory</option>
         </select>
       </section>
+
+      {/* Photos */}
+      <section>
+        <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+          <span className="w-6 h-6 rounded-full bg-green-100 text-green-700 flex items-center justify-center text-xs">6</span>
+          Inspection Photos
+        </h3>
+        <RobustPhotoUpload
+          formId={formId}
+          moduleData={photosData}
+          onChange={(data) => updateModule('photos', data)}
+        />
+      </section>
+
+      {/* Signatures */}
+      <section>
+        <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+          <span className="w-6 h-6 rounded-full bg-green-100 text-green-700 flex items-center justify-center text-xs">7</span>
+          Signatures
+        </h3>
+        <SignatureModule
+          moduleData={signaturesData}
+          onChange={(data) => updateModule('signatures', data)}
+          formId={formId}
+        />
+      </section>
     </div>
   );
 }
 
 // Worker Orientation Form (Subcontractor Site Orientation)
-function WorkerOrientationForm({ formData, updateField }: FormEditorProps) {
+function WorkerOrientationForm({ formData, updateField, updateModule, formId }: FormEditorProps) {
+  // Get module data for signatures and photos
+  const modules = formData.modules as Record<string, unknown> || {};
+  const signaturesData = (modules.signatures || []) as SignatureEntry[];
+  const photosData = (modules.photos || { photos: [] }) as { photos: Array<{ id: string; storage_url: string; caption: string; uploaded_at?: string }> };
   // Safe Work Practices checklist items (from screenshot)
   const safeWorkPractices = [
     { id: 'over_under_work', label: 'Over / Under Work' },
@@ -688,58 +775,30 @@ function WorkerOrientationForm({ formData, updateField }: FormEditorProps) {
           <span className="w-6 h-6 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center text-xs">7</span>
           Signatures
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Worker Signature */}
-          <div className="p-4 border border-gray-200 rounded-lg">
-            <label className="block text-xs font-medium text-gray-600 mb-2">Worker Signature</label>
-            <div className="h-24 bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center text-xs text-gray-400">
-              {getFieldValue(formData, 'signatures', 'worker_signed', false) as boolean ? (
-                <span className="text-green-600 font-medium">✓ Signed</span>
-              ) : (
-                <span>Signature capture coming soon</span>
-              )}
-            </div>
-            <div className="mt-2">
-              <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={getFieldValue(formData, 'signatures', 'worker_signed', false) as boolean}
-                  onChange={(e) => updateField('signatures', 'worker_signed', e.target.checked)}
-                  className="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
-                />
-                Mark as signed by worker
-              </label>
-            </div>
-          </div>
-          {/* Supervisor Signature */}
-          <div className="p-4 border border-gray-200 rounded-lg">
-            <label className="block text-xs font-medium text-gray-600 mb-2">Alpha Supervisor Signature</label>
-            <div className="h-24 bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center text-xs text-gray-400">
-              {getFieldValue(formData, 'signatures', 'supervisor_signed', false) as boolean ? (
-                <span className="text-green-600 font-medium">✓ Signed</span>
-              ) : (
-                <span>Signature capture coming soon</span>
-              )}
-            </div>
-            <div className="mt-2">
-              <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={getFieldValue(formData, 'signatures', 'supervisor_signed', false) as boolean}
-                  onChange={(e) => updateField('signatures', 'supervisor_signed', e.target.checked)}
-                  className="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
-                />
-                Mark as signed by supervisor
-              </label>
-            </div>
-          </div>
-        </div>
+        <SignatureModule
+          moduleData={signaturesData}
+          onChange={(data) => updateModule('signatures', data)}
+          formId={formId}
+        />
+      </section>
+
+      {/* Photos */}
+      <section>
+        <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+          <span className="w-6 h-6 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center text-xs">8</span>
+          Documentation Photos
+        </h3>
+        <RobustPhotoUpload
+          formId={formId}
+          moduleData={photosData}
+          onChange={(data) => updateModule('photos', data)}
+        />
       </section>
 
       {/* Additional Notes */}
       <section>
         <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-          <span className="w-6 h-6 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center text-xs">8</span>
+          <span className="w-6 h-6 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center text-xs">9</span>
           Additional Notes
         </h3>
         <textarea
@@ -755,8 +814,13 @@ function WorkerOrientationForm({ formData, updateField }: FormEditorProps) {
 }
 
 // Generic Form Editor (for worker form types that don't have custom UI yet)
-function GenericFormEditor({ formData, updateField, templateId }: FormEditorProps & { templateId: string }) {
+function GenericFormEditor({ formData, updateField, updateModule, formId, templateId }: FormEditorProps & { templateId: string }) {
   const config = getFormTypeConfig(templateId);
+
+  // Get module data for signatures and photos
+  const modules = formData.modules as Record<string, unknown> || {};
+  const signaturesData = (modules.signatures || []) as SignatureEntry[];
+  const photosData = (modules.photos || { photos: [] }) as { photos: Array<{ id: string; storage_url: string; caption: string; uploaded_at?: string }> };
   
   return (
     <div className="space-y-6">
@@ -781,6 +845,26 @@ function GenericFormEditor({ formData, updateField, templateId }: FormEditorProp
           placeholder="Add any notes or information for this form..."
           rows={8}
           className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+        />
+      </section>
+
+      {/* Photos */}
+      <section>
+        <h3 className="text-sm font-semibold text-gray-700 mb-3">Photos</h3>
+        <RobustPhotoUpload
+          formId={formId}
+          moduleData={photosData}
+          onChange={(data) => updateModule('photos', data)}
+        />
+      </section>
+
+      {/* Signatures */}
+      <section>
+        <h3 className="text-sm font-semibold text-gray-700 mb-3">Signatures</h3>
+        <SignatureModule
+          moduleData={signaturesData}
+          onChange={(data) => updateModule('signatures', data)}
+          formId={formId}
         />
       </section>
     </div>
