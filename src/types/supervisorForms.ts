@@ -20,7 +20,8 @@ export type FormTypeId =
   // Supervisor-specific form types
   | 'toolbox_talk'
   | 'weekly_inspection'
-  | 'worker_orientation';
+  | 'worker_orientation'
+  | 'daily_report';
 
 /**
  * Configuration for each form type
@@ -111,6 +112,16 @@ export const SUPERVISOR_FORM_TYPES: FormTypeConfig[] = [
     category: 'supervisor',
     color: 'text-teal-700',
     bgColor: 'bg-teal-100',
+  },
+  {
+    id: 'daily_report',
+    name: 'Daily Report',
+    shortName: 'Daily Report',
+    icon: '📊',
+    description: 'AI-generated daily project report with work summary, safety, manpower, and issues',
+    category: 'supervisor',
+    color: 'text-indigo-700',
+    bgColor: 'bg-indigo-100',
   },
 ];
 

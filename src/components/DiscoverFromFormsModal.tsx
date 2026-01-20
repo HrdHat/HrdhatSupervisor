@@ -138,23 +138,12 @@ export function DiscoverFromFormsModal({
     const success: string[] = [];
     const failed: string[] = [];
 
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/0fb85a1d-a3b1-4c77-bfeb-610e3c7231e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DiscoverFromFormsModal.tsx:handleAdd',message:'handleAdd called',data:{mode,selectedCount:selectedIds.size,projectId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1'})}).catch(()=>{});
-    // #endregion
-
     try {
       if (mode === 'workers') {
         const toAdd = editableWorkers.filter((w) => selectedIds.has(w.id));
         
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/0fb85a1d-a3b1-4c77-bfeb-610e3c7231e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DiscoverFromFormsModal.tsx:workersToAdd',message:'Workers to add as contacts',data:{count:toAdd.length,workers:toAdd.map(w=>({name:w.name,email:w.email}))},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix'})}).catch(()=>{});
-        // #endregion
-        
         for (const worker of toAdd) {
           try {
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/0fb85a1d-a3b1-4c77-bfeb-610e3c7231e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DiscoverFromFormsModal.tsx:beforeAddContact',message:'Calling addContact',data:{name:worker.name,email:worker.email,projectId},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix'})}).catch(()=>{});
-            // #endregion
             await addContact({
               name: worker.name,
               email: worker.email || undefined,
@@ -163,15 +152,9 @@ export function DiscoverFromFormsModal({
               source: 'discovered',
               recent_project_id: projectId, // Track which project they were discovered from
             });
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/0fb85a1d-a3b1-4c77-bfeb-610e3c7231e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DiscoverFromFormsModal.tsx:afterAddContact',message:'addContact succeeded',data:{name:worker.name},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix'})}).catch(()=>{});
-            // #endregion
             success.push(worker.name);
           } catch (error) {
             const message = error instanceof Error ? error.message : 'Unknown error';
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/0fb85a1d-a3b1-4c77-bfeb-610e3c7231e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DiscoverFromFormsModal.tsx:addContactError',message:'addContact failed',data:{name:worker.name,error:message},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix'})}).catch(()=>{});
-            // #endregion
             failed.push(`${worker.name} - ${message}`);
           }
         }

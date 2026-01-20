@@ -10,6 +10,7 @@ import { ShiftCloseout } from '@/components/ShiftCloseout';
 import { CreateShiftModal } from '@/components/CreateShiftModal';
 import { DiscoverFromFormsModal } from '@/components/DiscoverFromFormsModal';
 import { ProjectDailyReportModal } from '@/components/ProjectDailyReportModal';
+import { GenerateDailyReportModal } from '@/components/GenerateDailyReportModal';
 import { QuickAddBar } from '@/components/QuickAddBar';
 import { DailyLogModal } from '@/components/DailyLogModal';
 import { DailyLogList } from '@/components/DailyLogList';
@@ -118,6 +119,9 @@ export default function ProjectDetail() {
   const [showPDRModal, setShowPDRModal] = useState(false);
   const [pdrDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [selectedPDR, setSelectedPDR] = useState<ProjectDailyReport | null>(null);
+  
+  // AI Daily Report modal state
+  const [showAIDailyReportModal, setShowAIDailyReportModal] = useState(false);
 
   // Project overview collapse state (collapsed by default on mobile)
   const [isOverviewExpanded, setIsOverviewExpanded] = useState(
@@ -768,6 +772,16 @@ export default function ProjectDetail() {
                 setShowDailyLogModal(true);
               }}
             />
+            {/* Generate Daily Report Button */}
+            <div className="mt-3 pt-3 border-t border-gray-200">
+              <button
+                onClick={() => setShowAIDailyReportModal(true)}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-lg hover:from-indigo-600 hover:to-purple-600 transition-all shadow-sm"
+              >
+                <span className="text-lg">📊</span>
+                <span className="font-medium">Generate daily report powered by Gemini</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -2518,6 +2532,23 @@ export default function ProjectDetail() {
           }}
           onGenerated={(_report) => {
             fetchDailyReports(projectId);
+          }}
+        />
+      )}
+
+      {/* Generate AI Daily Report Modal */}
+      {showAIDailyReportModal && projectId && project && (
+        <GenerateDailyReportModal
+          projectId={projectId}
+          projectName={project.name}
+          isOpen={showAIDailyReportModal}
+          onClose={() => setShowAIDailyReportModal(false)}
+          onGenerated={(formId) => {
+            // Open the generated form for review
+            setEditingFormId(formId);
+            // Switch to My Forms tab to see the generated report
+            setActiveTab('documents');
+            setFormsSubTab('my_forms');
           }}
         />
       )}

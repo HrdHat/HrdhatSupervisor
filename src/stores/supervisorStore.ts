@@ -194,6 +194,9 @@ interface SupervisorState {
   updateDailyReport: (reportId: string, weather?: CreateDailyReportInput['weather'], summaryNotes?: string) => Promise<void>;
   deleteDailyReport: (reportId: string) => Promise<void>;
   getDailyReportByDate: (date: string) => ProjectDailyReport | undefined;
+  
+  // AI Daily Report Actions
+  generateAIDailyReport: (projectId: string, reportDate: string) => Promise<string | null>;
 
   // Supervisor Forms State & Actions
   supervisorForms: SupervisorFormInstance[];
@@ -526,10 +529,6 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
   addWorker: async (projectId, userEmail, subcontractorId) => {
     set({ loading: true, error: null });
 
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/0fb85a1d-a3b1-4c77-bfeb-610e3c7231e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'supervisorStore.ts:addWorker:entry',message:'addWorker called',data:{projectId,userEmail,subcontractorId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2,H4'})}).catch(()=>{});
-    // #endregion
-
     try {
       // First, find the user by email
       const { data: userData, error: userError } = await supabase
@@ -537,10 +536,6 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
         .select('id')
         .eq('email', userEmail)
         .single();
-
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/0fb85a1d-a3b1-4c77-bfeb-610e3c7231e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'supervisorStore.ts:addWorker:userLookup',message:'User lookup result',data:{userEmail,found:!!userData,userId:userData?.id,error:userError?.message},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H4'})}).catch(()=>{});
-      // #endregion
 
       if (userError || !userData) {
         throw new Error('User not found with that email address');
@@ -564,10 +559,6 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
         })
         .select()
         .single();
-
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/0fb85a1d-a3b1-4c77-bfeb-610e3c7231e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'supervisorStore.ts:addWorker:insertResult',message:'Insert result',data:{success:!!data,workerId:data?.id,error:error?.message},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5'})}).catch(()=>{});
-      // #endregion
 
       if (error) throw error;
 
@@ -2601,6 +2592,57 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
 
   getDailyReportByDate: (date) => {
     return get().dailyReports.find((report) => report.report_date === date);
+  },
+
+  // ============================================================================
+  // AI Daily Report Actions
+  // ============================================================================
+
+  generateAIDailyReport: async (projectId, reportDate) => {
+    set({ loading: true, error: null });
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) throw new Error('Not authenticated');
+
+      // Use direct fetch like other edge functions in this codebase
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-daily-report`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ project_id: projectId, report_date: reportDate }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (!data?.success || !data?.form_id) {
+        throw new Error(data?.error || 'Failed to generate daily report');
+      }
+
+      // Refresh the supervisor forms list to include the new report
+      await get().fetchSupervisorForms(projectId);
+
+      set({ loading: false });
+      return data.form_id;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to generate AI daily report';
+      console.error('generateAIDailyReport error:', message);
+      set({ error: message, loading: false });
+      return null;
+    }
   },
 
   // ============================================================================
