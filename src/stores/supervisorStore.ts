@@ -2679,6 +2679,23 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
 
       if (!user) throw new Error('Not authenticated');
 
+      // Check if project already has 20 active forms (supervisor form limit)
+      const { data: projectForms, error: countError } = await supabase
+        .from('form_instances')
+        .select('id')
+        .eq('project_id', input.project_id)
+        .eq('status', 'active');
+
+      if (countError) {
+        throw new Error(`Failed to validate form limit: ${countError.message}`);
+      }
+
+      if (projectForms && projectForms.length >= 20) {
+        throw new Error(
+          'This project has reached the maximum of 20 active forms. Please archive or delete existing forms before creating new ones.'
+        );
+      }
+
       // Generate unique form number (YYYYMMDD-NN format)
       const today = new Date();
       const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
