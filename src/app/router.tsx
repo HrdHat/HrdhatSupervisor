@@ -5,6 +5,7 @@ import Dashboard from './routes/Dashboard';
 import Login from './routes/Login';
 import Projects from './routes/Projects';
 import ProjectDetail from './routes/ProjectDetail';
+import LogArchive from './routes/LogArchive';
 
 // Protected route wrapper
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -73,6 +74,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <ProjectDetail />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/projects/:projectId/log-archive',
+    element: (
+      <ProtectedRoute>
+        <LogArchive />
       </ProtectedRoute>
     ),
   },

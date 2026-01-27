@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams, useNavigate } from 'react-router-dom';
 
 import { useAuthStore } from '@/stores/authStore';
 import { useSupervisorStore } from '@/stores/supervisorStore';
@@ -182,9 +182,13 @@ export default function ProjectDetail() {
   // Daily Log & PDR store selectors
   const dailyLogs = useSupervisorStore((s) => s.dailyLogs);
   const dailyReports = useSupervisorStore((s) => s.dailyReports);
-  const fetchDailyLogs = useSupervisorStore((s) => s.fetchDailyLogs);
+  const fetchDailyLogsForDateRange = useSupervisorStore((s) => s.fetchDailyLogsForDateRange);
   const fetchDailyReports = useSupervisorStore((s) => s.fetchDailyReports);
   const deleteDailyLog = useSupervisorStore((s) => s.deleteDailyLog);
+  const getDailyLogsGroupedByPeriod = useSupervisorStore((s) => s.getDailyLogsGroupedByPeriod);
+  
+  // Navigation for archive
+  const navigate = useNavigate();
 
   // Supervisor Forms store selectors
   const fetchSupervisorForms = useSupervisorStore((s) => s.fetchSupervisorForms);
@@ -231,6 +235,16 @@ export default function ProjectDetail() {
     }
   }, [projects.length, fetchProjects]);
 
+  // Helper to get date strings for the 7-day range
+  const getSevenDayRange = useCallback(() => {
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+    const sevenDaysAgo = new Date(today);
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+    const sevenDaysAgoStr = sevenDaysAgo.toISOString().split('T')[0];
+    return { startDate: sevenDaysAgoStr, endDate: todayStr };
+  }, []);
+
   useEffect(() => {
     if (projectId) {
       // Track this as the last active project for redirect on next login
@@ -241,11 +255,15 @@ export default function ProjectDetail() {
       fetchSubcontractors(projectId);
       fetchDocuments(projectId);
       fetchShifts(projectId);
-      fetchDailyLogs(projectId);
+      
+      // Fetch daily logs for the past 7 days
+      const { startDate, endDate } = getSevenDayRange();
+      fetchDailyLogsForDateRange(projectId, startDate, endDate);
+      
       fetchDailyReports(projectId);
       fetchSupervisorForms(projectId);
     }
-  }, [projectId, setLastActiveProject, fetchFolders, fetchContacts, fetchSubcontractors, fetchDocuments, fetchShifts, fetchDailyLogs, fetchDailyReports, fetchSupervisorForms]);
+  }, [projectId, setLastActiveProject, fetchFolders, fetchContacts, fetchSubcontractors, fetchDocuments, fetchShifts, fetchDailyLogsForDateRange, fetchDailyReports, fetchSupervisorForms, getSevenDayRange]);
 
   // Handle URL query parameters for deep linking (e.g., from Dashboard "Start New Shift")
   useEffect(() => {
@@ -785,15 +803,23 @@ export default function ProjectDetail() {
           </div>
         </div>
 
-        {/* Daily Logs List - Collapsible, Sortable by time or category */}
+        {/* Daily Logs List - Collapsible, Grouped by Period (Today, Yesterday, Earlier This Week) */}
         <div className="mt-4">
           <DailyLogList 
             logs={dailyLogs}
+            title="Recent Logs"
+            groupedByPeriod={getDailyLogsGroupedByPeriod()}
             onDeleteLog={async (logId) => {
               await deleteDailyLog(logId);
               // Refresh logs after deletion
               if (projectId) {
-                fetchDailyLogs(projectId);
+                const { startDate, endDate } = getSevenDayRange();
+                fetchDailyLogsForDateRange(projectId, startDate, endDate);
+              }
+            }}
+            onViewArchive={() => {
+              if (projectId) {
+                navigate(`/projects/${projectId}/log-archive`);
               }
             }}
             isExpanded={isDailyLogsExpanded}
@@ -2493,8 +2519,9 @@ export default function ProjectDetail() {
             setSelectedLogType(null);
           }}
           onLogAdded={() => {
-            // Refresh daily logs
-            fetchDailyLogs(projectId);
+            // Refresh daily logs for the 7-day range
+            const { startDate, endDate } = getSevenDayRange();
+            fetchDailyLogsForDateRange(projectId, startDate, endDate);
           }}
         />
       )}

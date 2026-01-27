@@ -181,6 +181,7 @@ interface SupervisorState {
   dailyLogs: ProjectDailyLog[];
   dailyReports: ProjectDailyReport[];
   fetchDailyLogs: (projectId: string, date?: string) => Promise<void>;
+  fetchDailyLogsForDateRange: (projectId: string, startDate: string, endDate: string) => Promise<void>;
   addDailyLog: (input: CreateDailyLogInput) => Promise<ProjectDailyLog | null>;
   updateDailyLog: (logId: string, input: UpdateDailyLogInput) => Promise<void>;
   deleteDailyLog: (logId: string) => Promise<void>;
@@ -188,6 +189,7 @@ interface SupervisorState {
   getDailyLogsByDate: (date: string) => ProjectDailyLog[];
   getDailyLogsByType: (date: string, logType: DailyLogType) => ProjectDailyLog[];
   getOpenSiteIssues: () => ProjectDailyLog[];
+  getDailyLogsGroupedByPeriod: () => { today: ProjectDailyLog[]; yesterday: ProjectDailyLog[]; earlierThisWeek: ProjectDailyLog[]; archive: ProjectDailyLog[] };
   
   // PDR Actions
   fetchDailyReports: (projectId: string) => Promise<void>;
@@ -2344,6 +2346,28 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
     }
   },
 
+  fetchDailyLogsForDateRange: async (projectId, startDate, endDate) => {
+    set({ loading: true, error: null });
+
+    try {
+      const { data, error } = await supabase
+        .from('project_daily_logs')
+        .select('*')
+        .eq('project_id', projectId)
+        .gte('log_date', startDate)
+        .lte('log_date', endDate)
+        .order('log_date', { ascending: false })
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      set({ dailyLogs: data ?? [], loading: false });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to fetch daily logs';
+      set({ error: message, loading: false });
+    }
+  },
+
   addDailyLog: async (input) => {
     set({ loading: true, error: null });
 
@@ -2477,6 +2501,43 @@ export const useSupervisorStore = create<SupervisorState>((set, get) => ({
     return get().dailyLogs.filter(
       (log) => log.log_type === 'site_issue' && log.status !== 'resolved'
     );
+  },
+
+  getDailyLogsGroupedByPeriod: () => {
+    const logs = get().dailyLogs;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const todayStr = today.toISOString().split('T')[0];
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+    
+    // 7 days ago (for "earlier this week" boundary)
+    const sevenDaysAgo = new Date(today);
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+    const sevenDaysAgoStr = sevenDaysAgo.toISOString().split('T')[0];
+
+    const result = {
+      today: [] as ProjectDailyLog[],
+      yesterday: [] as ProjectDailyLog[],
+      earlierThisWeek: [] as ProjectDailyLog[],
+      archive: [] as ProjectDailyLog[],
+    };
+
+    for (const log of logs) {
+      if (log.log_date === todayStr) {
+        result.today.push(log);
+      } else if (log.log_date === yesterdayStr) {
+        result.yesterday.push(log);
+      } else if (log.log_date >= sevenDaysAgoStr) {
+        result.earlierThisWeek.push(log);
+      } else {
+        result.archive.push(log);
+      }
+    }
+
+    return result;
   },
 
   // ============================================================================

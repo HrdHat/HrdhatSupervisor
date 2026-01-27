@@ -5,6 +5,7 @@ import type {
   VisitorMetadata,
   DeliveryMetadata,
   ManpowerMetadata,
+  ManpowerPersonnelEntry,
   SiteIssueMetadata,
   ScheduleDelayMetadata,
   ObservationMetadata,
@@ -33,10 +34,13 @@ function getTodayDate(): string {
 
 export function DailyLogModal({ projectId, logType, isOpen, onClose, onLogAdded }: DailyLogModalProps) {
   const addDailyLog = useSupervisorStore((s) => s.addDailyLog);
+  const contacts = useSupervisorStore((s) => s.contacts);
+  const subcontractors = useSupervisorStore((s) => s.subcontractors);
   const config = DAILY_LOG_TYPE_CONFIG[logType];
 
   // Common fields
   const [content, setContent] = useState('');
+  const [selectedDate, setSelectedDate] = useState(getTodayDate());
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Photo upload state (for observation)
@@ -44,6 +48,11 @@ export function DailyLogModal({ projectId, logType, isOpen, onClose, onLogAdded 
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Personnel selection state (for manpower logs)
+  const [showCustomInput, setShowCustomInput] = useState(false);
+  const [customName, setCustomName] = useState('');
+  const [customType, setCustomType] = useState<'worker' | 'subcontractor'>('worker');
 
   // Type-specific metadata
   const [visitorMeta, setVisitorMeta] = useState<VisitorMetadata>({
@@ -61,6 +70,7 @@ export function DailyLogModal({ projectId, logType, isOpen, onClose, onLogAdded 
     trade: '',
     count: 0,
     hours: 8,
+    personnel: [],
   });
   const [issueMeta, setIssueMeta] = useState<SiteIssueMetadata>({
     priority: 'medium',
@@ -72,6 +82,37 @@ export function DailyLogModal({ projectId, logType, isOpen, onClose, onLogAdded 
     location: '',
     area: '',
   });
+
+  // Add personnel to manpower metadata
+  const addPersonnel = (entry: ManpowerPersonnelEntry) => {
+    const current = manpowerMeta.personnel ?? [];
+    // Avoid duplicates (by name + type)
+    if (!current.some(p => p.name === entry.name && p.type === entry.type)) {
+      setManpowerMeta({ ...manpowerMeta, personnel: [...current, { ...entry, hours: 8 }] }); // Default 8 hours
+    }
+  };
+
+  // Remove personnel from manpower metadata
+  const removePersonnel = (index: number) => {
+    const current = manpowerMeta.personnel ?? [];
+    setManpowerMeta({ ...manpowerMeta, personnel: current.filter((_, i) => i !== index) });
+  };
+
+  // Update personnel hours
+  const updatePersonnelHours = (index: number, hours: number) => {
+    const current = manpowerMeta.personnel ?? [];
+    const updated = current.map((p, i) => i === index ? { ...p, hours } : p);
+    setManpowerMeta({ ...manpowerMeta, personnel: updated });
+  };
+
+  // Handle custom personnel addition
+  const handleAddCustom = () => {
+    if (customName.trim()) {
+      addPersonnel({ type: customType, name: customName.trim(), hours: 8 });
+      setCustomName('');
+      setShowCustomInput(false);
+    }
+  };
 
   // Handle photo selection
   const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -173,7 +214,7 @@ export function DailyLogModal({ projectId, logType, isOpen, onClose, onLogAdded 
 
       await addDailyLog({
         project_id: projectId,
-        log_date: getTodayDate(),
+        log_date: selectedDate,
         log_type: logType,
         content: content.trim(),
         metadata,
@@ -194,14 +235,18 @@ export function DailyLogModal({ projectId, logType, isOpen, onClose, onLogAdded 
   // Reset form to initial state
   const resetForm = () => {
     setContent('');
+    setSelectedDate(getTodayDate());
     setPhotoFile(null);
     setPhotoPreview(null);
     setVisitorMeta({ name: '', company: '', time_in: getCurrentTime() });
     setDeliveryMeta({ supplier: '', items: '', delivery_time: getCurrentTime() });
-    setManpowerMeta({ company: '', trade: '', count: 0, hours: 8 });
+    setManpowerMeta({ company: '', trade: '', count: 0, hours: 8, personnel: [] });
     setIssueMeta({ priority: 'medium' });
     setScheduleMeta({ delay_type: 'other' });
     setObservationMeta({ location: '', area: '' });
+    setShowCustomInput(false);
+    setCustomName('');
+    setCustomType('worker');
   };
 
   // Handle close
@@ -242,6 +287,21 @@ export function DailyLogModal({ projectId, logType, isOpen, onClose, onLogAdded 
           {/* Content */}
           <form onSubmit={handleSubmit} className="px-6 py-4 overflow-y-auto max-h-[60vh]">
             <div className="space-y-4">
+              {/* Log Date Picker */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Log Date</label>
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  max={getTodayDate()}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  {selectedDate === getTodayDate() ? 'Today' : `Backdated to ${new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`}
+                </p>
+              </div>
+
               {/* Type-specific fields */}
               {logType === 'visitor' && (
                 <>
@@ -395,6 +455,158 @@ export function DailyLogModal({ projectId, logType, isOpen, onClose, onLogAdded 
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                       />
                     </div>
+                  </div>
+
+                  {/* Personnel on Site */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Personnel on Site</label>
+                    <div className="flex gap-2">
+                      <select
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                        value=""
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          if (!value) return;
+                          
+                          if (value.startsWith('contact:')) {
+                            const contactId = value.replace('contact:', '');
+                            const contact = contacts.find(c => c.id === contactId);
+                            if (contact) {
+                              addPersonnel({ type: 'worker', name: contact.name, id: contact.id });
+                            }
+                          } else if (value.startsWith('sub:')) {
+                            const subId = value.replace('sub:', '');
+                            const sub = subcontractors.find(s => s.id === subId);
+                            if (sub) {
+                              addPersonnel({ type: 'subcontractor', name: sub.company_name, id: sub.id });
+                            }
+                          }
+                        }}
+                      >
+                        <option value="">Select worker or subcontractor...</option>
+                        {contacts.length > 0 && (
+                          <optgroup label="Workers (Contacts)">
+                            {contacts.map(c => (
+                              <option key={c.id} value={`contact:${c.id}`}>
+                                {c.name}{c.company_name ? ` (${c.company_name})` : ''}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {subcontractors.length > 0 && (
+                          <optgroup label="Subcontractors">
+                            {subcontractors.filter(s => s.status === 'active').map(s => (
+                              <option key={s.id} value={`sub:${s.id}`}>
+                                {s.company_name}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => setShowCustomInput(!showCustomInput)}
+                        className="px-3 py-2 text-sm font-medium text-purple-600 border border-purple-300 rounded-lg hover:bg-purple-50 transition-colors whitespace-nowrap"
+                      >
+                        + Custom
+                      </button>
+                    </div>
+
+                    {/* Custom name input */}
+                    {showCustomInput && (
+                      <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                        <div className="flex gap-2 items-end">
+                          <div className="flex-1">
+                            <label className="block text-xs text-gray-600 mb-1">Name</label>
+                            <input
+                              type="text"
+                              value={customName}
+                              onChange={(e) => setCustomName(e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                              placeholder="Enter name..."
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleAddCustom();
+                                }
+                              }}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-600 mb-1">Type</label>
+                            <select
+                              value={customType}
+                              onChange={(e) => setCustomType(e.target.value as 'worker' | 'subcontractor')}
+                              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                            >
+                              <option value="worker">Worker</option>
+                              <option value="subcontractor">Subcontractor</option>
+                            </select>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleAddCustom}
+                            disabled={!customName.trim()}
+                            className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          >
+                            Add
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Personnel list with hours */}
+                    {(manpowerMeta.personnel?.length ?? 0) > 0 && (
+                      <div className="mt-3 space-y-2">
+                        {manpowerMeta.personnel?.map((person, idx) => (
+                          <div
+                            key={`${person.type}-${person.name}-${idx}`}
+                            className={`flex items-center gap-3 p-2 rounded-lg border ${
+                              person.type === 'worker' 
+                                ? 'bg-blue-50 border-blue-200' 
+                                : 'bg-green-50 border-green-200'
+                            }`}
+                          >
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className={`font-medium text-sm truncate ${
+                                  person.type === 'worker' ? 'text-blue-700' : 'text-green-700'
+                                }`}>
+                                  {person.name}
+                                </span>
+                                <span className={`text-xs px-1.5 py-0.5 rounded ${
+                                  person.type === 'worker' 
+                                    ? 'bg-blue-100 text-blue-600' 
+                                    : 'bg-green-100 text-green-600'
+                                }`}>
+                                  {person.type === 'worker' ? 'Worker' : 'Sub'}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <label className="text-xs text-gray-500">Hrs:</label>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.5"
+                                value={person.hours ?? 8}
+                                onChange={(e) => updatePersonnelHours(idx, parseFloat(e.target.value) || 0)}
+                                className="w-16 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removePersonnel(idx)}
+                              className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </>
               )}

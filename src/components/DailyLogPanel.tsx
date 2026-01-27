@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useSupervisorStore } from '@/stores/supervisorStore';
 import type {
   DailyLogType,
@@ -6,6 +6,7 @@ import type {
   VisitorMetadata,
   DeliveryMetadata,
   ManpowerMetadata,
+  ManpowerPersonnelEntry,
   SiteIssueMetadata,
   ScheduleDelayMetadata,
   ObservationMetadata,
@@ -20,6 +21,7 @@ interface DailyLogPanelProps {
   projectId: string;
   selectedDate?: string; // ISO date, defaults to today
   onOpenSiteIssues?: () => void;
+  onViewArchive?: () => void;
   compact?: boolean;
 }
 
@@ -57,6 +59,35 @@ function getCurrentTime(): string {
 function getTodayDate(): string {
   return new Date().toISOString().split('T')[0];
 }
+
+function getSevenDaysAgoDate(): string {
+  const date = new Date();
+  date.setDate(date.getDate() - 6);
+  return date.toISOString().split('T')[0];
+}
+
+function getYesterdayDate(): string {
+  const date = new Date();
+  date.setDate(date.getDate() - 1);
+  return date.toISOString().split('T')[0];
+}
+
+type DatePeriod = 'today' | 'yesterday' | 'earlierThisWeek';
+
+function getDatePeriod(logDate: string): DatePeriod {
+  const today = getTodayDate();
+  const yesterday = getYesterdayDate();
+  
+  if (logDate === today) return 'today';
+  if (logDate === yesterday) return 'yesterday';
+  return 'earlierThisWeek';
+}
+
+const PERIOD_CONFIG: Record<DatePeriod, { label: string; icon: string }> = {
+  today: { label: 'Today', icon: '📅' },
+  yesterday: { label: 'Yesterday', icon: '📆' },
+  earlierThisWeek: { label: 'Earlier This Week', icon: '🗓️' },
+};
 
 // ============================================================================
 // Log Entry Card Component
@@ -110,6 +141,29 @@ function LogEntryCard({ log, onDelete, onToggleStatus }: LogEntryCardProps) {
             {meta.trade && <p><span className="font-medium">Trade:</span> {meta.trade}</p>}
             {meta.count !== undefined && <p><span className="font-medium">Workers:</span> {meta.count}</p>}
             {meta.hours !== undefined && <p><span className="font-medium">Hours:</span> {meta.hours}</p>}
+            {meta.personnel && meta.personnel.length > 0 && (
+              <div className="mt-1.5">
+                <span className="font-medium">Personnel:</span>
+                <div className="mt-1 space-y-1">
+                  {meta.personnel.map((person, idx) => (
+                    <div
+                      key={`${person.type}-${person.name}-${idx}`}
+                      className={`inline-flex items-center gap-2 px-2 py-1 text-[10px] rounded ${
+                        person.type === 'worker' 
+                          ? 'bg-blue-50 text-blue-600' 
+                          : 'bg-green-50 text-green-600'
+                      }`}
+                    >
+                      <span className="font-medium">{person.name}</span>
+                      <span className="opacity-60">({person.type === 'worker' ? 'W' : 'Sub'})</span>
+                      {person.hours !== undefined && (
+                        <span className="font-medium">{person.hours}h</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         );
       }
@@ -233,16 +287,47 @@ interface QuickAddFormProps {
 
 function QuickAddForm({ logType, projectId, selectedDate, onAdded }: QuickAddFormProps) {
   const addDailyLog = useSupervisorStore((s) => s.addDailyLog);
+  const contacts = useSupervisorStore((s) => s.contacts);
+  const subcontractors = useSupervisorStore((s) => s.subcontractors);
   const [content, setContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Type-specific metadata
   const [visitorMeta, setVisitorMeta] = useState<VisitorMetadata>({ name: '', company: '', time_in: getCurrentTime() });
   const [deliveryMeta, setDeliveryMeta] = useState<DeliveryMetadata>({ supplier: '', items: '', delivery_time: getCurrentTime() });
-  const [manpowerMeta, setManpowerMeta] = useState<ManpowerMetadata>({ company: '', trade: '', count: 0, hours: 8 });
+  const [manpowerMeta, setManpowerMeta] = useState<ManpowerMetadata>({ company: '', trade: '', count: 0, hours: 8, personnel: [] });
   const [issueMeta, setIssueMeta] = useState<SiteIssueMetadata>({ priority: 'medium' });
   const [scheduleMeta, setScheduleMeta] = useState<ScheduleDelayMetadata>({ delay_type: 'other' });
   const [observationMeta, setObservationMeta] = useState<ObservationMetadata>({ location: '', area: '' });
+  
+  // Personnel selection state (for manpower logs)
+  const [showCustomInput, setShowCustomInput] = useState(false);
+  const [customName, setCustomName] = useState('');
+  const [customType, setCustomType] = useState<'worker' | 'subcontractor'>('worker');
+
+  // Add personnel to manpower metadata
+  const addPersonnel = (entry: ManpowerPersonnelEntry) => {
+    const current = manpowerMeta.personnel ?? [];
+    // Avoid duplicates (by name + type)
+    if (!current.some(p => p.name === entry.name && p.type === entry.type)) {
+      setManpowerMeta({ ...manpowerMeta, personnel: [...current, entry] });
+    }
+  };
+
+  // Remove personnel from manpower metadata
+  const removePersonnel = (index: number) => {
+    const current = manpowerMeta.personnel ?? [];
+    setManpowerMeta({ ...manpowerMeta, personnel: current.filter((_, i) => i !== index) });
+  };
+
+  // Handle custom personnel addition
+  const handleAddCustom = () => {
+    if (customName.trim()) {
+      addPersonnel({ type: customType, name: customName.trim() });
+      setCustomName('');
+      setShowCustomInput(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -285,10 +370,13 @@ function QuickAddForm({ logType, projectId, selectedDate, onAdded }: QuickAddFor
     setContent('');
     setVisitorMeta({ name: '', company: '', time_in: getCurrentTime() });
     setDeliveryMeta({ supplier: '', items: '', delivery_time: getCurrentTime() });
-    setManpowerMeta({ company: '', trade: '', count: 0, hours: 8 });
+    setManpowerMeta({ company: '', trade: '', count: 0, hours: 8, personnel: [] });
     setIssueMeta({ priority: 'medium' });
     setScheduleMeta({ delay_type: 'other' });
     setObservationMeta({ location: '', area: '' });
+    setShowCustomInput(false);
+    setCustomName('');
+    setCustomType('worker');
     setIsSubmitting(false);
     onAdded();
   };
@@ -405,47 +493,176 @@ function QuickAddForm({ logType, projectId, selectedDate, onAdded }: QuickAddFor
       )}
 
       {logType === 'manpower' && (
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Company/Sub</label>
-            <input
-              type="text"
-              value={manpowerMeta.company}
-              onChange={(e) => setManpowerMeta({ ...manpowerMeta, company: e.target.value })}
-              className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
-              placeholder="Company name"
-            />
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Company/Sub</label>
+              <input
+                type="text"
+                value={manpowerMeta.company}
+                onChange={(e) => setManpowerMeta({ ...manpowerMeta, company: e.target.value })}
+                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                placeholder="Company name"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Trade</label>
+              <input
+                type="text"
+                value={manpowerMeta.trade}
+                onChange={(e) => setManpowerMeta({ ...manpowerMeta, trade: e.target.value })}
+                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                placeholder="e.g., Electrician"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1"># of Workers</label>
+              <input
+                type="number"
+                min="0"
+                value={manpowerMeta.count ?? 0}
+                onChange={(e) => setManpowerMeta({ ...manpowerMeta, count: parseInt(e.target.value) || 0 })}
+                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Hours</label>
+              <input
+                type="number"
+                min="0"
+                step="0.5"
+                value={manpowerMeta.hours ?? 8}
+                onChange={(e) => setManpowerMeta({ ...manpowerMeta, hours: parseFloat(e.target.value) || 0 })}
+                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+              />
+            </div>
           </div>
+
+          {/* Personnel on Site */}
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Trade</label>
-            <input
-              type="text"
-              value={manpowerMeta.trade}
-              onChange={(e) => setManpowerMeta({ ...manpowerMeta, trade: e.target.value })}
-              className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
-              placeholder="e.g., Electrician"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1"># of Workers</label>
-            <input
-              type="number"
-              min="0"
-              value={manpowerMeta.count ?? 0}
-              onChange={(e) => setManpowerMeta({ ...manpowerMeta, count: parseInt(e.target.value) || 0 })}
-              className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Hours</label>
-            <input
-              type="number"
-              min="0"
-              step="0.5"
-              value={manpowerMeta.hours ?? 8}
-              onChange={(e) => setManpowerMeta({ ...manpowerMeta, hours: parseFloat(e.target.value) || 0 })}
-              className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
-            />
+            <label className="block text-xs font-medium text-gray-700 mb-1">Personnel on Site</label>
+            <div className="flex gap-2">
+              <select
+                className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-sm"
+                value=""
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (!value) return;
+                  
+                  if (value.startsWith('contact:')) {
+                    const contactId = value.replace('contact:', '');
+                    const contact = contacts.find(c => c.id === contactId);
+                    if (contact) {
+                      addPersonnel({ type: 'worker', name: contact.name, id: contact.id });
+                    }
+                  } else if (value.startsWith('sub:')) {
+                    const subId = value.replace('sub:', '');
+                    const sub = subcontractors.find(s => s.id === subId);
+                    if (sub) {
+                      addPersonnel({ type: 'subcontractor', name: sub.company_name, id: sub.id });
+                    }
+                  }
+                }}
+              >
+                <option value="">Select worker or subcontractor...</option>
+                {contacts.length > 0 && (
+                  <optgroup label="Workers (Contacts)">
+                    {contacts.map(c => (
+                      <option key={c.id} value={`contact:${c.id}`}>
+                        {c.name}{c.company_name ? ` (${c.company_name})` : ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {subcontractors.length > 0 && (
+                  <optgroup label="Subcontractors">
+                    {subcontractors.filter(s => s.status === 'active').map(s => (
+                      <option key={s.id} value={`sub:${s.id}`}>
+                        {s.company_name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+              <button
+                type="button"
+                onClick={() => setShowCustomInput(!showCustomInput)}
+                className="px-2 py-1.5 text-xs font-medium text-purple-600 border border-purple-300 rounded hover:bg-purple-50 transition-colors"
+              >
+                + Custom
+              </button>
+            </div>
+
+            {/* Custom name input */}
+            {showCustomInput && (
+              <div className="mt-2 p-2 bg-gray-50 rounded border border-gray-200">
+                <div className="flex gap-2 items-end">
+                  <div className="flex-1">
+                    <label className="block text-xs text-gray-600 mb-1">Name</label>
+                    <input
+                      type="text"
+                      value={customName}
+                      onChange={(e) => setCustomName(e.target.value)}
+                      className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                      placeholder="Enter name..."
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddCustom();
+                        }
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Type</label>
+                    <select
+                      value={customType}
+                      onChange={(e) => setCustomType(e.target.value as 'worker' | 'subcontractor')}
+                      className="px-2 py-1 border border-gray-300 rounded text-sm"
+                    >
+                      <option value="worker">Worker</option>
+                      <option value="subcontractor">Subcontractor</option>
+                    </select>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddCustom}
+                    disabled={!customName.trim()}
+                    className="px-3 py-1 text-xs font-medium text-white bg-purple-600 rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Personnel chips */}
+            {(manpowerMeta.personnel?.length ?? 0) > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {manpowerMeta.personnel?.map((person, idx) => (
+                  <span
+                    key={`${person.type}-${person.name}-${idx}`}
+                    className={`inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full ${
+                      person.type === 'worker' 
+                        ? 'bg-blue-100 text-blue-700' 
+                        : 'bg-green-100 text-green-700'
+                    }`}
+                  >
+                    <span className="font-medium">{person.name}</span>
+                    <span className="opacity-60">({person.type === 'worker' ? 'W' : 'Sub'})</span>
+                    <button
+                      type="button"
+                      onClick={() => removePersonnel(idx)}
+                      className="ml-0.5 hover:opacity-70"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -563,31 +780,46 @@ function QuickAddForm({ logType, projectId, selectedDate, onAdded }: QuickAddFor
 // Main Component
 // ============================================================================
 
-export function DailyLogPanel({ projectId, selectedDate, onOpenSiteIssues, compact = false }: DailyLogPanelProps) {
+export function DailyLogPanel({ projectId, selectedDate, onOpenSiteIssues, onViewArchive, compact = false }: DailyLogPanelProps) {
   const [activeTab, setActiveTab] = useState<DailyLogType>('visitor');
   const [showAddForm, setShowAddForm] = useState(false);
   
   const dailyLogs = useSupervisorStore((s) => s.dailyLogs);
-  const fetchDailyLogs = useSupervisorStore((s) => s.fetchDailyLogs);
+  const fetchDailyLogsForDateRange = useSupervisorStore((s) => s.fetchDailyLogsForDateRange);
   const deleteDailyLog = useSupervisorStore((s) => s.deleteDailyLog);
   const toggleSiteIssueStatus = useSupervisorStore((s) => s.toggleSiteIssueStatus);
   const getOpenSiteIssues = useSupervisorStore((s) => s.getOpenSiteIssues);
 
   const today = selectedDate ?? getTodayDate();
+  const sevenDaysAgo = getSevenDaysAgoDate();
 
-  // Fetch logs on mount and when date changes
+  // Fetch logs for the past 7 days on mount and when project changes
   useEffect(() => {
-    fetchDailyLogs(projectId, today);
-  }, [projectId, today, fetchDailyLogs]);
+    fetchDailyLogsForDateRange(projectId, sevenDaysAgo, today);
+  }, [projectId, sevenDaysAgo, today, fetchDailyLogsForDateRange]);
 
-  // Filter logs by current tab and date
-  const filteredLogs = dailyLogs.filter(
-    (log) => log.log_type === activeTab && log.log_date === today
-  );
+  // Filter logs by current tab (within 7-day range)
+  const filteredByType = dailyLogs.filter((log) => log.log_type === activeTab);
 
-  // Get counts for each tab
+  // Group filtered logs by period
+  const logsByPeriod = useMemo(() => {
+    const grouped: Record<DatePeriod, ProjectDailyLog[]> = {
+      today: [],
+      yesterday: [],
+      earlierThisWeek: [],
+    };
+    
+    filteredByType.forEach((log) => {
+      const period = getDatePeriod(log.log_date);
+      grouped[period].push(log);
+    });
+    
+    return grouped;
+  }, [filteredByType]);
+
+  // Get counts for each tab (all periods combined)
   const getLogCount = (type: DailyLogType) => 
-    dailyLogs.filter((log) => log.log_type === type && log.log_date === today).length;
+    dailyLogs.filter((log) => log.log_type === type).length;
 
   const openIssuesCount = getOpenSiteIssues().length;
 
@@ -618,7 +850,7 @@ export function DailyLogPanel({ projectId, selectedDate, onOpenSiteIssues, compa
           <div>
             <h3 className="text-sm font-semibold text-gray-800">Daily Log</h3>
             <p className="text-xs text-gray-500 mt-0.5">
-              {new Date(today + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+              Last 7 days
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -688,9 +920,9 @@ export function DailyLogPanel({ projectId, selectedDate, onOpenSiteIssues, compa
         </div>
       )}
 
-      {/* Log Entries List */}
-      <div className={`${compact ? 'py-3' : 'p-4'} space-y-2 max-h-80 overflow-y-auto`}>
-        {filteredLogs.length === 0 ? (
+      {/* Log Entries List - Grouped by Period */}
+      <div className={`${compact ? 'py-3' : 'p-4'} space-y-4 max-h-96 overflow-y-auto`}>
+        {filteredByType.length === 0 ? (
           <div className="text-center py-6">
             <p className="text-sm text-gray-400">No {DAILY_LOG_TYPE_CONFIG[activeTab].label.toLowerCase()} logged yet</p>
             <button
@@ -701,14 +933,57 @@ export function DailyLogPanel({ projectId, selectedDate, onOpenSiteIssues, compa
             </button>
           </div>
         ) : (
-          filteredLogs.map((log) => (
-            <LogEntryCard
-              key={log.id}
-              log={log}
-              onDelete={handleDelete}
-              onToggleStatus={log.log_type === 'site_issue' ? handleToggleStatus : undefined}
-            />
-          ))
+          <>
+            {/* Render each period section */}
+            {(['today', 'yesterday', 'earlierThisWeek'] as DatePeriod[]).map((period) => {
+              const periodLogs = logsByPeriod[period];
+              if (periodLogs.length === 0) return null;
+              
+              const periodConfig = PERIOD_CONFIG[period];
+              
+              return (
+                <div key={period}>
+                  {/* Period Header */}
+                  <div className="flex items-center gap-2 mb-2 px-1">
+                    <span className="text-sm">{periodConfig.icon}</span>
+                    <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                      {periodConfig.label}
+                    </span>
+                    <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                      {periodLogs.length}
+                    </span>
+                  </div>
+                  
+                  {/* Period Logs */}
+                  <div className="space-y-2">
+                    {periodLogs.map((log) => (
+                      <LogEntryCard
+                        key={log.id}
+                        log={log}
+                        onDelete={handleDelete}
+                        onToggleStatus={log.log_type === 'site_issue' ? handleToggleStatus : undefined}
+                      />
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+            
+            {/* View Archive Link */}
+            {onViewArchive && (
+              <div className="pt-3 border-t border-gray-200">
+                <button
+                  onClick={onViewArchive}
+                  className="w-full py-2 px-4 text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors flex items-center justify-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                  </svg>
+                  View Log Archive
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

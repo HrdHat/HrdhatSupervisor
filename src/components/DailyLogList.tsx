@@ -4,6 +4,14 @@ import { DAILY_LOG_TYPE_CONFIG } from '@/types/supervisor';
 
 type SortMode = 'time_desc' | 'time_asc' | 'category';
 
+/** Logs grouped by time period */
+export interface LogsByPeriod {
+  today: ProjectDailyLog[];
+  yesterday: ProjectDailyLog[];
+  earlierThisWeek: ProjectDailyLog[];
+  archive?: ProjectDailyLog[];
+}
+
 interface DailyLogListProps {
   logs: ProjectDailyLog[];
   onLogClick?: (log: ProjectDailyLog) => void;
@@ -13,12 +21,34 @@ interface DailyLogListProps {
   /** If provided, enables external collapse control */
   isExpanded?: boolean;
   onToggleExpand?: () => void;
+  /** Custom title for the header (defaults to "Today's Logs") */
+  title?: string;
+  /** If provided, displays logs grouped by period (Today, Yesterday, Earlier This Week) */
+  groupedByPeriod?: LogsByPeriod;
+  /** Callback when "View Archive" is clicked */
+  onViewArchive?: () => void;
+  /** Hide the sort controls */
+  hideSortControls?: boolean;
 }
 
-export function DailyLogList({ logs, onLogClick, onDeleteLog, filterTypes, isExpanded = true, onToggleExpand }: DailyLogListProps) {
+export function DailyLogList({ 
+  logs, 
+  onLogClick, 
+  onDeleteLog, 
+  filterTypes, 
+  isExpanded = true, 
+  onToggleExpand,
+  title = "Today's Logs",
+  groupedByPeriod,
+  onViewArchive,
+  hideSortControls = false,
+}: DailyLogListProps) {
   const [sortMode, setSortMode] = useState<SortMode>('time_desc');
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
   const isCollapsible = onToggleExpand !== undefined;
+  
+  // When using groupedByPeriod mode, we show period sections instead of flat list
+  const isPeriodMode = groupedByPeriod !== undefined;
 
   // Filter and sort logs
   const processedLogs = useMemo(() => {
@@ -277,7 +307,37 @@ export function DailyLogList({ logs, onLogClick, onDeleteLog, filterTypes, isExp
     );
   };
 
-  if (logs.length === 0) {
+  // Render a period section (Today, Yesterday, Earlier This Week)
+  const renderPeriodSection = (periodTitle: string, periodLogs: ProjectDailyLog[], icon: string) => {
+    if (periodLogs.length === 0) return null;
+    
+    return (
+      <div key={periodTitle} className="mb-6">
+        <div className="flex items-center gap-2 mb-3 px-1">
+          <span className="text-base">{icon}</span>
+          <span className="text-sm font-semibold text-gray-700">
+            {periodTitle}
+          </span>
+          <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+            {periodLogs.length}
+          </span>
+        </div>
+        <div className="space-y-2">
+          {periodLogs.map(renderLogCard)}
+        </div>
+      </div>
+    );
+  };
+
+  // Calculate total logs for period mode
+  const totalPeriodLogs = groupedByPeriod 
+    ? groupedByPeriod.today.length + groupedByPeriod.yesterday.length + groupedByPeriod.earlierThisWeek.length
+    : 0;
+
+  // Check if there are any logs (either flat or period mode)
+  const hasLogs = isPeriodMode ? totalPeriodLogs > 0 : logs.length > 0;
+
+  if (!hasLogs) {
     return (
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         {/* Header with collapse toggle */}
@@ -296,20 +356,23 @@ export function DailyLogList({ logs, onLogClick, onDeleteLog, filterTypes, isExp
             </svg>
           )}
           <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-            Today's Logs
+            {title}
           </span>
           <span className="text-xs text-gray-400">(0)</span>
         </div>
         {isExpanded && (
           <div className="px-6 pb-6 text-center text-gray-500">
             <span className="text-3xl mb-2 block">📋</span>
-            <p className="text-sm">No log entries yet today</p>
+            <p className="text-sm">No log entries yet</p>
             <p className="text-xs text-gray-400 mt-1">Use Quick Add above to create your first entry</p>
           </div>
         )}
       </div>
     );
   }
+
+  // Determine displayed count
+  const displayCount = isPeriodMode ? totalPeriodLogs : processedLogs.length;
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -331,13 +394,13 @@ export function DailyLogList({ logs, onLogClick, onDeleteLog, filterTypes, isExp
             </svg>
           )}
           <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-            Today's Logs
+            {title}
           </span>
-          <span className="text-xs text-gray-400">({processedLogs.length})</span>
+          <span className="text-xs text-gray-400">({displayCount})</span>
         </div>
         
-        {/* Sort Toggle - only show when expanded */}
-        {isExpanded && (
+        {/* Sort Toggle - only show when expanded and not in period mode */}
+        {isExpanded && !isPeriodMode && !hideSortControls && (
           <div 
             className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5"
             onClick={(e) => e.stopPropagation()}
@@ -381,8 +444,38 @@ export function DailyLogList({ logs, onLogClick, onDeleteLog, filterTypes, isExp
       
       {/* Log List - collapsible content */}
       {isExpanded && (
-        <div className="max-h-[400px] overflow-y-auto pr-1 px-4 pb-4">
-          {sortMode === 'category' && groupedLogs ? (
+        <div className="max-h-[500px] overflow-y-auto pr-1 px-4 pb-4">
+          {isPeriodMode && groupedByPeriod ? (
+            // Grouped by period (Today, Yesterday, Earlier This Week)
+            <div>
+              {renderPeriodSection('Today', groupedByPeriod.today, '📅')}
+              {renderPeriodSection('Yesterday', groupedByPeriod.yesterday, '📆')}
+              {renderPeriodSection('Earlier This Week', groupedByPeriod.earlierThisWeek, '🗓️')}
+              
+              {/* View Archive Link */}
+              {onViewArchive && (
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onViewArchive();
+                    }}
+                    className="w-full py-2 px-4 text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                    </svg>
+                    View Log Archive
+                    {groupedByPeriod.archive && groupedByPeriod.archive.length > 0 && (
+                      <span className="text-xs text-gray-400">
+                        ({groupedByPeriod.archive.length} older)
+                      </span>
+                    )}
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : sortMode === 'category' && groupedLogs ? (
             // Grouped by category
             <div>
               {(Object.keys(groupedLogs) as DailyLogType[]).map(logType => 

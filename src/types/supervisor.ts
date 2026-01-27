@@ -551,6 +551,16 @@ export interface DeliveryMetadata {
 }
 
 /**
+ * Personnel entry for manpower log (worker or subcontractor)
+ */
+export interface ManpowerPersonnelEntry {
+  type: 'worker' | 'subcontractor';
+  name: string;
+  id?: string; // Optional - populated if selected from contacts/subcontractors
+  hours?: number; // Hours worked by this person
+}
+
+/**
  * Metadata for manpower log entries
  */
 export interface ManpowerMetadata {
@@ -558,6 +568,7 @@ export interface ManpowerMetadata {
   trade?: string;
   count?: number;
   hours?: number;
+  personnel?: ManpowerPersonnelEntry[]; // List of workers/subcontractors on site
 }
 
 /**
