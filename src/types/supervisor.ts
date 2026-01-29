@@ -520,7 +520,19 @@ export interface CreateContactInput {
 /**
  * Type of daily log entry
  */
-export type DailyLogType = 'visitor' | 'delivery' | 'site_issue' | 'manpower' | 'schedule_delay' | 'observation';
+export type DailyLogType = 'visitor' | 'delivery' | 'site_issue' | 'manpower' | 'schedule_delay' | 'observation' | 'note' | 'meeting_minutes';
+
+/**
+ * Note category types
+ */
+export type NoteCategory = 'phone' | 'email' | 'drawing' | 'follow_up' | 'safety' | 'quality' | 'change_order';
+
+/**
+ * Meeting type options
+ */
+export type MeetingType = 'safety_briefing' | 'progress' | 'coordination' | 'owner' | 'subcontractor' | 
+                          'preconstruction' | 'kickoff' | 'closeout' | 'inspection' | 'design' | 
+                          'site_walk' | 'general' | 'other';
 
 /**
  * Status for site issue logs
@@ -600,6 +612,28 @@ export interface ObservationMetadata {
 }
 
 /**
+ * Metadata for note log entries
+ */
+export interface NoteMetadata {
+  category: NoteCategory;
+  related_to?: string;  // Optional reference (person, company, document)
+  priority?: 'low' | 'medium' | 'high';
+}
+
+/**
+ * Metadata for meeting minutes log entries
+ */
+export interface MeetingMinutesMetadata {
+  meeting_type: MeetingType;
+  custom_type?: string;      // Only when meeting_type = 'other'
+  meeting_title: string;
+  attendees: string[];       // Array of attendee names
+  meeting_time?: string;     // HH:MM format
+  location?: string;
+  duration_minutes?: number;
+}
+
+/**
  * Union type for all metadata types
  */
 export type DailyLogMetadata = 
@@ -609,6 +643,8 @@ export type DailyLogMetadata =
   | SiteIssueMetadata 
   | ScheduleDelayMetadata 
   | ObservationMetadata
+  | NoteMetadata
+  | MeetingMinutesMetadata
   | Record<string, unknown>;
 
 /**
@@ -709,6 +745,40 @@ export const DAILY_LOG_TYPE_CONFIG: Record<DailyLogType, { label: string; icon: 
   manpower: { label: 'Manpower', icon: '👷', color: 'text-purple-700', bgColor: 'bg-purple-100' },
   schedule_delay: { label: 'Schedule/Delay', icon: '📅', color: 'text-orange-700', bgColor: 'bg-orange-100' },
   observation: { label: 'Observation', icon: '👁️', color: 'text-teal-700', bgColor: 'bg-teal-100' },
+  note: { label: 'Note', icon: '📝', color: 'text-indigo-700', bgColor: 'bg-indigo-100' },
+  meeting_minutes: { label: 'Meeting', icon: '🤝', color: 'text-cyan-700', bgColor: 'bg-cyan-100' },
+};
+
+/**
+ * Note category configuration for UI
+ */
+export const NOTE_CATEGORY_CONFIG: Record<NoteCategory, { label: string; icon: string; color: string; bgColor: string }> = {
+  phone: { label: 'Phone Call', icon: '📞', color: 'text-blue-700', bgColor: 'bg-blue-100' },
+  email: { label: 'Email', icon: '📧', color: 'text-indigo-700', bgColor: 'bg-indigo-100' },
+  drawing: { label: 'Drawing/Detail', icon: '✏️', color: 'text-purple-700', bgColor: 'bg-purple-100' },
+  follow_up: { label: 'Follow-up', icon: '⏰', color: 'text-orange-700', bgColor: 'bg-orange-100' },
+  safety: { label: 'Safety Concern', icon: '🛡️', color: 'text-red-700', bgColor: 'bg-red-100' },
+  quality: { label: 'Quality Issue', icon: '✅', color: 'text-amber-700', bgColor: 'bg-amber-100' },
+  change_order: { label: 'Change Order', icon: '📄', color: 'text-green-700', bgColor: 'bg-green-100' },
+};
+
+/**
+ * Meeting type configuration for UI
+ */
+export const MEETING_TYPE_CONFIG: Record<MeetingType, { label: string }> = {
+  safety_briefing: { label: 'Safety Briefing / Toolbox Talk' },
+  progress: { label: 'Progress Meeting' },
+  coordination: { label: 'Coordination Meeting' },
+  owner: { label: 'Owner / Client Meeting' },
+  subcontractor: { label: 'Subcontractor Meeting' },
+  preconstruction: { label: 'Pre-construction Meeting' },
+  kickoff: { label: 'Project Kickoff' },
+  closeout: { label: 'Closeout Meeting' },
+  inspection: { label: 'Inspection Meeting' },
+  design: { label: 'Design Review' },
+  site_walk: { label: 'Site Walk / Walk-through' },
+  general: { label: 'General Meeting' },
+  other: { label: 'Other' },
 };
 
 /**

@@ -10,11 +10,17 @@ import type {
   SiteIssueMetadata,
   ScheduleDelayMetadata,
   ObservationMetadata,
+  NoteMetadata,
+  MeetingMinutesMetadata,
+  NoteCategory,
+  MeetingType,
   SiteIssueStatus,
 } from '@/types/supervisor';
 import {
   DAILY_LOG_TYPE_CONFIG,
   SITE_ISSUE_STATUS_CONFIG,
+  NOTE_CATEGORY_CONFIG,
+  MEETING_TYPE_CONFIG,
 } from '@/types/supervisor';
 
 interface DailyLogPanelProps {
@@ -213,6 +219,60 @@ function LogEntryCard({ log, onDelete, onToggleStatus }: LogEntryCardProps) {
           </div>
         );
       }
+      case 'note': {
+        const meta = log.metadata as NoteMetadata;
+        const categoryConfig = NOTE_CATEGORY_CONFIG[meta.category];
+        return (
+          <div className="text-xs text-gray-500 mt-1 space-y-0.5">
+            {meta.category && (
+              <p>
+                <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${categoryConfig?.bgColor} ${categoryConfig?.color}`}>
+                  {categoryConfig?.icon} {categoryConfig?.label}
+                </span>
+              </p>
+            )}
+            {meta.related_to && <p><span className="font-medium">Related to:</span> {meta.related_to}</p>}
+            {meta.priority && (
+              <p>
+                <span className="font-medium">Priority:</span>{' '}
+                <span className={meta.priority === 'high' ? 'text-red-600' : meta.priority === 'medium' ? 'text-yellow-600' : 'text-gray-600'}>
+                  {meta.priority.charAt(0).toUpperCase() + meta.priority.slice(1)}
+                </span>
+              </p>
+            )}
+          </div>
+        );
+      }
+      case 'meeting_minutes': {
+        const meta = log.metadata as MeetingMinutesMetadata;
+        const meetingTypeLabel = meta.meeting_type === 'other' && meta.custom_type 
+          ? meta.custom_type 
+          : MEETING_TYPE_CONFIG[meta.meeting_type]?.label;
+        return (
+          <div className="text-xs text-gray-500 mt-1 space-y-0.5">
+            {meta.meeting_title && <p className="font-medium text-gray-700">{meta.meeting_title}</p>}
+            {meetingTypeLabel && <p><span className="font-medium">Type:</span> {meetingTypeLabel}</p>}
+            {meta.attendees && meta.attendees.length > 0 && (
+              <div>
+                <span className="font-medium">Attendees:</span>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {meta.attendees.map((attendee, idx) => (
+                    <span
+                      key={`${attendee}-${idx}`}
+                      className="inline-flex items-center px-1.5 py-0.5 bg-cyan-50 text-cyan-700 rounded text-[10px]"
+                    >
+                      {attendee}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {meta.meeting_time && <p><span className="font-medium">Time:</span> {formatTime(meta.meeting_time)}</p>}
+            {meta.location && <p><span className="font-medium">Location:</span> {meta.location}</p>}
+            {meta.duration_minutes && <p><span className="font-medium">Duration:</span> {meta.duration_minutes} min</p>}
+          </div>
+        );
+      }
       default:
         return null;
     }
@@ -299,6 +359,16 @@ function QuickAddForm({ logType, projectId, selectedDate, onAdded }: QuickAddFor
   const [issueMeta, setIssueMeta] = useState<SiteIssueMetadata>({ priority: 'medium' });
   const [scheduleMeta, setScheduleMeta] = useState<ScheduleDelayMetadata>({ delay_type: 'other' });
   const [observationMeta, setObservationMeta] = useState<ObservationMetadata>({ location: '', area: '' });
+  const [noteMeta, setNoteMeta] = useState<NoteMetadata>({ category: 'phone' });
+  const [meetingMeta, setMeetingMeta] = useState<MeetingMinutesMetadata>({ 
+    meeting_type: 'general', 
+    meeting_title: '', 
+    attendees: [],
+    meeting_time: getCurrentTime(),
+  });
+  
+  // Meeting attendee input state
+  const [attendeeInput, setAttendeeInput] = useState('');
   
   // Personnel selection state (for manpower logs)
   const [showCustomInput, setShowCustomInput] = useState(false);
@@ -355,6 +425,12 @@ function QuickAddForm({ logType, projectId, selectedDate, onAdded }: QuickAddFor
       case 'observation':
         metadata = { ...observationMeta };
         break;
+      case 'note':
+        metadata = { ...noteMeta };
+        break;
+      case 'meeting_minutes':
+        metadata = { ...meetingMeta };
+        break;
     }
 
     await addDailyLog({
@@ -374,6 +450,9 @@ function QuickAddForm({ logType, projectId, selectedDate, onAdded }: QuickAddFor
     setIssueMeta({ priority: 'medium' });
     setScheduleMeta({ delay_type: 'other' });
     setObservationMeta({ location: '', area: '' });
+    setNoteMeta({ category: 'phone' });
+    setMeetingMeta({ meeting_type: 'general', meeting_title: '', attendees: [], meeting_time: getCurrentTime() });
+    setAttendeeInput('');
     setShowCustomInput(false);
     setCustomName('');
     setCustomType('worker');
@@ -392,6 +471,8 @@ function QuickAddForm({ logType, projectId, selectedDate, onAdded }: QuickAddFor
            logType === 'delivery' ? 'Items/Description' :
            logType === 'site_issue' ? 'Issue Description' :
            logType === 'manpower' ? 'Work Description' :
+           logType === 'note' ? 'Note Content' :
+           logType === 'meeting_minutes' ? 'Meeting Notes/Minutes' :
            'Delay/Schedule Notes'}
         </label>
         <textarea
@@ -763,6 +844,213 @@ function QuickAddForm({ logType, projectId, selectedDate, onAdded }: QuickAddFor
         </div>
       )}
 
+      {logType === 'note' && (
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Category</label>
+            <select
+              value={noteMeta.category}
+              onChange={(e) => setNoteMeta({ ...noteMeta, category: e.target.value as NoteCategory })}
+              className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+            >
+              {(Object.keys(NOTE_CATEGORY_CONFIG) as NoteCategory[]).map((cat) => (
+                <option key={cat} value={cat}>
+                  {NOTE_CATEGORY_CONFIG[cat].icon} {NOTE_CATEGORY_CONFIG[cat].label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Priority</label>
+            <select
+              value={noteMeta.priority ?? ''}
+              onChange={(e) => setNoteMeta({ ...noteMeta, priority: e.target.value as 'low' | 'medium' | 'high' | undefined || undefined })}
+              className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+            >
+              <option value="">None</option>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
+          </div>
+          <div className="col-span-2">
+            <label className="block text-xs font-medium text-gray-700 mb-1">Related To</label>
+            <input
+              type="text"
+              value={noteMeta.related_to ?? ''}
+              onChange={(e) => setNoteMeta({ ...noteMeta, related_to: e.target.value })}
+              className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+              placeholder="Person, company, or document (optional)"
+            />
+          </div>
+        </div>
+      )}
+
+      {logType === 'meeting_minutes' && (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <div className="col-span-2">
+              <label className="block text-xs font-medium text-gray-700 mb-1">Meeting Title</label>
+              <input
+                type="text"
+                value={meetingMeta.meeting_title}
+                onChange={(e) => setMeetingMeta({ ...meetingMeta, meeting_title: e.target.value })}
+                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                placeholder="e.g., Weekly Progress Meeting"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Meeting Type</label>
+              <select
+                value={meetingMeta.meeting_type}
+                onChange={(e) => setMeetingMeta({ ...meetingMeta, meeting_type: e.target.value as MeetingType })}
+                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+              >
+                {(Object.keys(MEETING_TYPE_CONFIG) as MeetingType[]).map((type) => (
+                  <option key={type} value={type}>
+                    {MEETING_TYPE_CONFIG[type].label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {meetingMeta.meeting_type === 'other' && (
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Custom Type</label>
+                <input
+                  type="text"
+                  value={meetingMeta.custom_type ?? ''}
+                  onChange={(e) => setMeetingMeta({ ...meetingMeta, custom_type: e.target.value })}
+                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                  placeholder="Enter custom meeting type"
+                />
+              </div>
+            )}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Time</label>
+              <input
+                type="time"
+                value={meetingMeta.meeting_time ?? ''}
+                onChange={(e) => setMeetingMeta({ ...meetingMeta, meeting_time: e.target.value })}
+                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Location</label>
+              <input
+                type="text"
+                value={meetingMeta.location ?? ''}
+                onChange={(e) => setMeetingMeta({ ...meetingMeta, location: e.target.value })}
+                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                placeholder="Optional"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Duration (min)</label>
+              <input
+                type="number"
+                min="0"
+                step="5"
+                value={meetingMeta.duration_minutes ?? ''}
+                onChange={(e) => setMeetingMeta({ ...meetingMeta, duration_minutes: parseInt(e.target.value) || undefined })}
+                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                placeholder="Optional"
+              />
+            </div>
+          </div>
+
+          {/* Attendees */}
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Attendees</label>
+            <div className="flex gap-2">
+              <select
+                className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-sm"
+                value=""
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (!value) return;
+                  
+                  if (value.startsWith('contact:')) {
+                    const contactId = value.replace('contact:', '');
+                    const contact = contacts.find(c => c.id === contactId);
+                    if (contact && !meetingMeta.attendees.includes(contact.name)) {
+                      setMeetingMeta({ ...meetingMeta, attendees: [...meetingMeta.attendees, contact.name] });
+                    }
+                  }
+                }}
+              >
+                <option value="">Select from contacts...</option>
+                {contacts.length > 0 && (
+                  <optgroup label="Contacts">
+                    {contacts.map(c => (
+                      <option key={c.id} value={`contact:${c.id}`}>
+                        {c.name}{c.company_name ? ` (${c.company_name})` : ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+              <div className="flex gap-1">
+                <input
+                  type="text"
+                  value={attendeeInput}
+                  onChange={(e) => setAttendeeInput(e.target.value)}
+                  className="w-32 px-2 py-1.5 border border-gray-300 rounded text-sm"
+                  placeholder="Add name..."
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      if (attendeeInput.trim() && !meetingMeta.attendees.includes(attendeeInput.trim())) {
+                        setMeetingMeta({ ...meetingMeta, attendees: [...meetingMeta.attendees, attendeeInput.trim()] });
+                        setAttendeeInput('');
+                      }
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (attendeeInput.trim() && !meetingMeta.attendees.includes(attendeeInput.trim())) {
+                      setMeetingMeta({ ...meetingMeta, attendees: [...meetingMeta.attendees, attendeeInput.trim()] });
+                      setAttendeeInput('');
+                    }
+                  }}
+                  className="px-2 py-1.5 text-xs font-medium text-cyan-600 border border-cyan-300 rounded hover:bg-cyan-50 transition-colors"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+
+            {/* Attendee chips */}
+            {meetingMeta.attendees.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {meetingMeta.attendees.map((attendee, idx) => (
+                  <span
+                    key={`${attendee}-${idx}`}
+                    className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-cyan-100 text-cyan-700 rounded-full"
+                  >
+                    <span>{attendee}</span>
+                    <button
+                      type="button"
+                      onClick={() => setMeetingMeta({ 
+                        ...meetingMeta, 
+                        attendees: meetingMeta.attendees.filter((_, i) => i !== idx) 
+                      })}
+                      className="hover:opacity-70"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Submit button */}
       <button
         type="submit"
@@ -830,6 +1118,8 @@ export function DailyLogPanel({ projectId, selectedDate, onOpenSiteIssues, onVie
     { type: 'manpower', label: 'Manpower' },
     { type: 'schedule_delay', label: 'Schedule' },
     { type: 'observation', label: 'Observations' },
+    { type: 'note', label: 'Notes' },
+    { type: 'meeting_minutes', label: 'Meetings' },
   ];
 
   const handleDelete = async (logId: string) => {

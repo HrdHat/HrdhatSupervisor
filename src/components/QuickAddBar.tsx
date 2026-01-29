@@ -17,6 +17,8 @@ const LOG_TYPE_BUTTONS: { type: DailyLogType | 'shift'; label: string; icon: str
   { type: 'site_issue', label: 'Site Issue', icon: '⚠️', color: 'text-red-700', bgColor: 'bg-red-100', hoverBg: 'hover:bg-red-200' },
   { type: 'schedule_delay', label: 'Schedule', icon: '📅', color: 'text-yellow-700', bgColor: 'bg-yellow-100', hoverBg: 'hover:bg-yellow-200' },
   { type: 'observation', label: 'Observation', icon: '👁️', color: 'text-teal-700', bgColor: 'bg-teal-100', hoverBg: 'hover:bg-teal-200' },
+  { type: 'note', label: 'Note', icon: '📝', color: 'text-indigo-700', bgColor: 'bg-indigo-100', hoverBg: 'hover:bg-indigo-200' },
+  { type: 'meeting_minutes', label: 'Meeting', icon: '🤝', color: 'text-emerald-700', bgColor: 'bg-emerald-100', hoverBg: 'hover:bg-emerald-200' },
 ];
 
 export function QuickAddBar({ onAddShift, onAddLog }: QuickAddBarProps) {
@@ -40,7 +42,7 @@ export function QuickAddBar({ onAddShift, onAddLog }: QuickAddBarProps) {
       </div>
       
       {/* Button Grid - All equal weight */}
-      <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
+      <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-2">
         {LOG_TYPE_BUTTONS.map(({ type, label, icon, color, bgColor, hoverBg }) => (
           <button
             key={type}

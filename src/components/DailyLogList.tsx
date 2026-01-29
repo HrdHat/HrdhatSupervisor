@@ -90,6 +90,8 @@ export function DailyLogList({
       manpower: [],
       schedule_delay: [],
       observation: [],
+      note: [],
+      meeting_minutes: [],
     };
     
     processedLogs.forEach(log => {
